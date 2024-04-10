@@ -27,6 +27,20 @@ public class Order {
     protected int minimumExecutionQuantity;
     protected boolean isNew = true;
 
+    public Order(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, LocalDateTime entryTime, OrderStatus status, int minimumExecutionQuantity, boolean isNew) {
+        this.orderId = orderId;
+        this.security = security;
+        this.side = side;
+        this.quantity = quantity;
+        this.price = price;
+        this.entryTime = entryTime;
+        this.broker = broker;
+        this.shareholder = shareholder;
+        this.status = status;
+        this.minimumExecutionQuantity = minimumExecutionQuantity;
+        this.isNew = isNew;
+    }
+
     public Order(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, LocalDateTime entryTime, OrderStatus status, int minimumExecutionQuantity) {
         this.orderId = orderId;
         this.security = security;

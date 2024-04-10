@@ -17,5 +17,5 @@ public class Message {
     public static final String CANNOT_CHANGE_MINIMUM_EXECUTION_QUANTITY = "Can not change the minimum execution quantity in a update request";
     public static final String MINIMUM_EXECUTION_QUANTITY_NOT_POSITIVE = "Minimum execution quantity is not-positive";
     public static final String INVALID_MINIMUM_EXECUTION_QUANTITY = "Minimum execution quantity is more than total quantity";
-
+    public static final String BROKER_HAS_NOT_ENOUGH_INITIAL_TRANSACTION = "minimum transactions in initial execution not met";
 }
