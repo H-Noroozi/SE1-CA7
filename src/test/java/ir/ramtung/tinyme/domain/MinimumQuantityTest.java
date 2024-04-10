@@ -9,6 +9,7 @@ import ir.ramtung.tinyme.messaging.TradeDTO;
 import ir.ramtung.tinyme.messaging.event.OrderAcceptedEvent;
 import ir.ramtung.tinyme.messaging.event.OrderExecutedEvent;
 import ir.ramtung.tinyme.messaging.event.OrderRejectedEvent;
+import ir.ramtung.tinyme.messaging.event.OrderUpdatedEvent;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
 import ir.ramtung.tinyme.repository.BrokerRepository;
 import ir.ramtung.tinyme.repository.SecurityRepository;
@@ -68,14 +69,14 @@ public class MinimumQuantityTest {
     }
 
     @Test
-    void new_buy_order_matches_partially_with_the_first_buy_with_minimum_quantity_less_than_buy_quantity() {
-        Order matchingBuyOrder = new Order(1, security, Side.BUY, 5, 5, brokerBuyer, shareholder, 2);
-        Order incomingSellOrder = new Order(2, security, Side.SELL, 3, 5, brokerSeller, shareholder, 0);
-        security.getOrderBook().enqueue(incomingSellOrder);
+    void new_buy_order_matches_if_minimum_execution_quantity_is_riched() {
+        Order incomingBuyOrder = new Order(1, security, Side.BUY, 5, 5, brokerBuyer, shareholder, 2);
+        Order matchingSellOrder = new Order(2, security, Side.SELL, 3, 5, brokerSeller, shareholder, 0);
+        security.getOrderBook().enqueue(matchingSellOrder);
 
         orderHandler.handleEnterOrder(EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 5, 5, 1, shareholder.getShareholderId(), 0, 2));
 
-        Trade trade = new Trade(security, 5, 3, matchingBuyOrder, incomingSellOrder);
+        Trade trade = new Trade(security, 5, 3, incomingBuyOrder, matchingSellOrder);
 
         verify(eventPublisher).publish((new OrderAcceptedEvent(1, 1)));
         verify(eventPublisher).publish(new OrderExecutedEvent(1, 1, List.of(new TradeDTO(trade))));
@@ -93,7 +94,7 @@ public class MinimumQuantityTest {
         verify(eventPublisher).publish(new OrderRejectedEvent(1, 1, List.of(Message.INVALID_MINIMUM_EXECUTION_QUANTITY)));
     }
     @Test
-    void invalid_buy_order_if_minimum_quantity_less_than_zero() {
+    void invalid_order_if_minimum_quantity_less_than_zero() {
         Order matchingBuyOrder = new Order(1, security, Side.BUY, 5, 5, brokerBuyer, shareholder, -1);
         Order incomingSellOrder = new Order(2, security, Side.SELL, 3, 5, brokerSeller, shareholder, 0);
         security.getOrderBook().enqueue(incomingSellOrder);
@@ -105,10 +106,9 @@ public class MinimumQuantityTest {
         verify(eventPublisher).publish(new OrderRejectedEvent(1, 1, List.of(Message.MINIMUM_EXECUTION_QUANTITY_NOT_POSITIVE)));
     }
     @Test
-    void invalid_buy_order_if_minimum_quantity_more_than_buy_quantity() {
-        Order matchingBuyOrder = new Order(1, security, Side.BUY, 5, 5, brokerBuyer, shareholder, 4);
-        Order incomingSellOrder = new Order(2, security, Side.SELL, 3, 5, brokerSeller, shareholder, 0);
-        security.getOrderBook().enqueue(incomingSellOrder);
+    void reject_order_if_minimum_executed_quantity_not_meeted() {
+        Order matchingSellOrder = new Order(2, security, Side.SELL, 3, 5, brokerSeller, shareholder, 0);
+        security.getOrderBook().enqueue(matchingSellOrder);
 
         orderHandler.handleEnterOrder(EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 5, 5, 1, shareholder.getShareholderId(), 0, 4));
 
@@ -116,9 +116,8 @@ public class MinimumQuantityTest {
     }
     @Test
     void invalid_update_order_if_minimum_quantity_more_than_quantity() {
-        Order matchingBuyOrder = new Order(1, security, Side.BUY, 5, 5, brokerBuyer, shareholder, 2);
-        Order incomingSellOrder = new Order(2, security, Side.SELL, 3, 5, brokerSeller, shareholder, 0);
-        security.getOrderBook().enqueue(incomingSellOrder);
+        Order matchingSellOrder = new Order(2, security, Side.SELL, 3, 5, brokerSeller, shareholder, 0);
+        security.getOrderBook().enqueue(matchingSellOrder);
 
         orderHandler.handleEnterOrder(EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 5, 5, 1, shareholder.getShareholderId(), 0, 2));
 
@@ -140,7 +139,6 @@ public class MinimumQuantityTest {
     }
     @Test
     void update_order_if_minimum_quantity_not_changed() {
-        Order matchingBuyOrder = new Order(1, security, Side.BUY, 3, 5, brokerBuyer, shareholder, 2);
         Order incomingSellOrder = new Order(2, security, Side.SELL, 5, 5, brokerSeller, shareholder, 0);
         security.getOrderBook().enqueue(incomingSellOrder);
 
