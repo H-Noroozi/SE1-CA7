@@ -71,13 +71,16 @@ public class Matcher {
                     rollbackTrades(order, result.trades());
                     return MatchResult.notEnoughCredit();
                 }
-                if (order.isNew() && order.getMinimumExecutionQuantity() > (initialQuantity - result.remainder().getQuantity())){
-                    rollbackTrades(order, result.trades());
-                    return MatchResult.notEnoughInitialTransaction();
-                }
 
                 order.getBroker().decreaseCreditBy(order.getValue());
             }
+            if (order.isNew() && order.getMinimumExecutionQuantity() > (initialQuantity - result.remainder().getQuantity())){
+                if (order.getSide() == Side.BUY){
+                    rollbackTrades(order, result.trades());
+                }
+                return MatchResult.notEnoughInitialTransaction();
+            }
+
             order.getSecurity().getOrderBook().enqueue(result.remainder());
         }
         if (!result.trades().isEmpty()) {
