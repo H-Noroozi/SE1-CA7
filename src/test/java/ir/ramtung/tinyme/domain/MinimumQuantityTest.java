@@ -150,4 +150,27 @@ public class MinimumQuantityTest {
 
         verify(eventPublisher).publish((new OrderAcceptedEvent(1, 1)));
     }
+    @Test
+    void new_iceberg_buy_order_matches_with_the_first_buy_with_minimum_quantity_less_than_buy_quantity() {
+        Order matchingBuyOrder = new IcebergOrder(1, security, Side.BUY, 5, 5, brokerBuyer, shareholder, 40,2);
+        Order incomingSellOrder = new IcebergOrder(2, security, Side.SELL, 3, 5, brokerSeller, shareholder, 40, 0);
+        security.getOrderBook().enqueue(incomingSellOrder);
+
+        orderHandler.handleEnterOrder(EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 5, 5, 1, shareholder.getShareholderId(), 0, 2));
+
+        Trade trade = new Trade(security, 5, 3, matchingBuyOrder, incomingSellOrder);
+
+        verify(eventPublisher).publish((new OrderAcceptedEvent(1, 1)));
+        verify(eventPublisher).publish(new OrderExecutedEvent(1, 1, List.of(new TradeDTO(trade))));
+    }
+    @Test
+    void invalid_iceberg_buy_order_if_minimum_quantity_more_than_buy_quantity() {
+        Order matchingBuyOrder = new IcebergOrder(1, security, Side.BUY, 5, 5, brokerBuyer, shareholder, 40, 4);
+        Order incomingSellOrder = new IcebergOrder(2, security, Side.SELL, 3, 5, brokerSeller, shareholder, 40, 0);
+        security.getOrderBook().enqueue(incomingSellOrder);
+
+        orderHandler.handleEnterOrder(EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 5, 5, 1, shareholder.getShareholderId(), 0, 4));
+
+        verify(eventPublisher).publish(new OrderRejectedEvent(1, 1, List.of(Message.BROKER_HAS_NOT_ENOUGH_INITIAL_TRANSACTION)));
+    }
 }
