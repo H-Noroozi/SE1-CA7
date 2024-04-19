@@ -21,8 +21,11 @@ public final class MatchResult {
     }
     public static MatchResult notEnoughInitialTransaction(){
         return new MatchResult(MatchingOutcome.NOT_ENOUGH_INITIAL_TRANSACTION, null, new LinkedList<>());
-
     }
+    public static MatchResult queuedAsInactiveOrder(){
+        return new MatchResult(MatchingOutcome.QUEUED_AS_INACTIVE_ORDER, null, new LinkedList<>());
+    }
+
     private MatchResult(MatchingOutcome outcome, Order remainder, LinkedList<Trade> trades) {
         this.outcome = outcome;
         this.remainder = remainder;

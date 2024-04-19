@@ -18,4 +18,7 @@ public class Message {
     public static final String MINIMUM_EXECUTION_QUANTITY_NOT_POSITIVE = "Minimum execution quantity is not-positive";
     public static final String INVALID_MINIMUM_EXECUTION_QUANTITY = "Minimum execution quantity is more than total quantity";
     public static final String BROKER_HAS_NOT_ENOUGH_INITIAL_TRANSACTION = "minimum transactions in initial execution not met";
+    public static final String ORDER_STOP_PRICE_NEGATIVE = "Order stop price is negative";
+    public static final String CANNOT_SPECIFY_MINIMUM_EXECUTION_QUANTITY_FOR_A_STOP_LIMIT_ORDER = "Cannot specify minimum execution quantity for a stop limit order";
+    public static final String ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG = "The order cannot be both a stop and an iceberg";
 }
