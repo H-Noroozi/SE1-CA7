@@ -8,7 +8,7 @@ public class InactiveOrderBook extends OrderBook {
     public StopLimitOrder checkFirstInactiveOrder(Side side, int lastTransactionPrice) {
         var queue = getQueue(side);
         StopLimitOrder stopLimitOrder = (StopLimitOrder) queue.getFirst();
-        if (stopLimitOrder.mustBeActive(lastTransactionPrice)){
+        if (stopLimitOrder.checkIfActive(lastTransactionPrice)){
             return stopLimitOrder;
         }
         else{

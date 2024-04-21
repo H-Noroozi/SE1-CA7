@@ -31,7 +31,7 @@ public class StopLimitOrder extends Order{
             return StopPrice > stopLimitOrder.StopPrice;
         }
     }
-    public boolean mustBeActive(int lastTransactionPrice){
+    public boolean checkIfActive(int lastTransactionPrice){
         if (side == Side.BUY)
             return StopPrice < lastTransactionPrice;
         else
