@@ -9,6 +9,9 @@ import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
 import ir.ramtung.tinyme.domain.service.Matcher;
 import ir.ramtung.tinyme.messaging.Message;
+import lombok.Setter;
+import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
+import org.springframework.jms.core.JmsTemplate;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -34,9 +37,9 @@ public class Security {
     @Builder.Default
     private int lastTransactionPrice = 0;
     @Builder.Default
-    private final LinkedList<Order> executableOrders = new LinkedList<>();
-
-    EventPublisher eventPublisher;
+    private LinkedList<Order> executableOrders = new LinkedList<>();
+    @Setter
+    private EventPublisher eventPublisher;
 
 
     public MatchResult newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
@@ -59,6 +62,7 @@ public class Security {
                     enterOrderRq.getStopPrice());
             if ( (stopLimitOrder.getSide() == Side.BUY && stopLimitOrder.getStopPrice() <= lastTransactionPrice) || (stopLimitOrder.getSide() == Side.SELL && stopLimitOrder.getStopPrice() >= lastTransactionPrice) ){
                 order = stopLimitOrder;
+                eventPublisher.publish(new OrderActivatedEvent(stopLimitOrder.orderId));
             }
             else{
                 if (stopLimitOrder.getSide() == Side.BUY) {
@@ -155,7 +159,7 @@ public class Security {
                 return;
             }
             executableOrders.add(stopLimitOrder);
-            eventPublisher.publish(new OrderActivatedEvent(inactiveOrderBook.getQueue(Side.BUY).get(0).orderId));
+            eventPublisher.publish(new OrderActivatedEvent(stopLimitOrder.orderId));
             inactiveOrderBook.removeFirst(side);
         }
     }
