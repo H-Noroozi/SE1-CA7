@@ -1,5 +1,9 @@
 package ir.ramtung.tinyme.domain.entity;
 
+import ir.ramtung.tinyme.messaging.TradeDTO;
+import ir.ramtung.tinyme.messaging.event.OrderAcceptedEvent;
+import ir.ramtung.tinyme.messaging.event.OrderActivatedEvent;
+import ir.ramtung.tinyme.messaging.event.OrderExecutedEvent;
 import ir.ramtung.tinyme.messaging.exception.InvalidRequestException;
 import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
@@ -11,6 +15,9 @@ import lombok.Getter;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.stream.Collectors;
+
+import ir.ramtung.tinyme.messaging.EventPublisher;
 
 @Getter
 @Builder
@@ -28,6 +35,8 @@ public class Security {
     private int lastTransactionPrice = 0;
     @Builder.Default
     private final LinkedList<Order> executableOrders = new LinkedList<>();
+
+    EventPublisher eventPublisher;
 
 
     public MatchResult newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
@@ -146,6 +155,7 @@ public class Security {
                 return;
             }
             executableOrders.add(stopLimitOrder);
+            eventPublisher.publish(new OrderActivatedEvent(inactiveOrderBook.getQueue(Side.BUY).get(0).orderId));
             inactiveOrderBook.removeFirst(side);
         }
     }
@@ -153,9 +163,11 @@ public class Security {
     public LinkedList<MatchResult> runExecutableOrders(Matcher matcher){
         LinkedList<MatchResult> results = new LinkedList<>();
         while (!executableOrders.isEmpty()){
+            long orderId = executableOrders.getFirst().getOrderId();
             MatchResult matchResult = matcher.execute(executableOrders.removeFirst());
             if (!matchResult.trades().isEmpty()) {
                 checkExecutableOrders(matchResult);
+                eventPublisher.publish(new OrderExecutedEvent(0, orderId, matchResult.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
             }
             results.add(matchResult);
         }
