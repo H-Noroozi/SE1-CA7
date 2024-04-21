@@ -9,9 +9,6 @@ import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
 import ir.ramtung.tinyme.domain.service.Matcher;
 import ir.ramtung.tinyme.messaging.Message;
-import lombok.Setter;
-import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
-import org.springframework.jms.core.JmsTemplate;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -21,6 +18,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import ir.ramtung.tinyme.messaging.EventPublisher;
+import lombok.Setter;
 
 @Getter
 @Builder
@@ -37,7 +35,7 @@ public class Security {
     @Builder.Default
     private int lastTransactionPrice = 0;
     @Builder.Default
-    private LinkedList<Order> executableOrders = new LinkedList<>();
+    private final LinkedList<Order> executableOrders = new LinkedList<>();
     @Setter
     private EventPublisher eventPublisher;
 
@@ -86,14 +84,25 @@ public class Security {
     public void deleteOrder(DeleteOrderRq deleteOrderRq) throws InvalidRequestException {
         Order order = orderBook.findByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
         if (order == null)
+            order = inactiveOrderBook.findByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
+        if (order == null)
             throw new InvalidRequestException(Message.ORDER_ID_NOT_FOUND);
+        if (order instanceof StopLimitOrder stopLimitOrder) {
+            inactiveOrderBook.removeByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
+            return;
+        }
         if (order.getSide() == Side.BUY)
             order.getBroker().increaseCreditBy(order.getValue());
         orderBook.removeByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
     }
 
     public MatchResult updateOrder(EnterOrderRq updateOrderRq, Matcher matcher) throws InvalidRequestException {
-        Order order = orderBook.findByOrderId(updateOrderRq.getSide(), updateOrderRq.getOrderId());
+        Order order;
+        if (updateOrderRq.getStopPrice() != 0) {
+            order = inactiveOrderBook.findByOrderId(updateOrderRq.getSide(), updateOrderRq.getOrderId());
+        }
+        else
+            order = orderBook.findByOrderId(updateOrderRq.getSide(), updateOrderRq.getOrderId());
         if (order == null)
             throw new InvalidRequestException(Message.ORDER_ID_NOT_FOUND);
         if ((order instanceof IcebergOrder) && updateOrderRq.getPeakSize() == 0)
@@ -113,11 +122,29 @@ public class Security {
                 || updateOrderRq.getPrice() != order.getPrice()
                 || ((order instanceof IcebergOrder icebergOrder) && (icebergOrder.getPeakSize() < updateOrderRq.getPeakSize()));
 
-        if (updateOrderRq.getSide() == Side.BUY) {
-            order.getBroker().increaseCreditBy(order.getValue());
-        }
         Order originalOrder = order.snapshot();
         order.updateFromRequest(updateOrderRq);
+
+        if (order instanceof StopLimitOrder stopLimitOrder) {
+            if (stopLimitOrder.mustBeActive(lastTransactionPrice)){
+                inactiveOrderBook.removeByOrderId(stopLimitOrder.getSide(), stopLimitOrder.getOrderId());
+                MatchResult matchResult = matcher.execute((Order) stopLimitOrder);
+                eventPublisher.publish(new OrderActivatedEvent(stopLimitOrder.orderId));
+                return matchResult;
+            }
+            else {
+                if (stopLimitOrder.getStopPrice() != ((StopLimitOrder) originalOrder).getStopPrice()){
+                    inactiveOrderBook.removeByOrderId(stopLimitOrder.getSide(), stopLimitOrder.getOrderId());
+                    inactiveOrderBook.enqueue(stopLimitOrder);
+                    return MatchResult.executed(null, List.of());
+                }
+            }
+        }
+
+        if (updateOrderRq.getSide() == Side.BUY) {
+            order.getBroker().increaseCreditBy(originalOrder.getValue());
+        }
+
         if (!losesPriority) {
             if (updateOrderRq.getSide() == Side.BUY) {
                 order.getBroker().decreaseCreditBy(order.getValue());

@@ -11,6 +11,7 @@ import ir.ramtung.tinyme.messaging.event.OrderAcceptedEvent;
 import ir.ramtung.tinyme.messaging.event.OrderActivatedEvent;
 import ir.ramtung.tinyme.messaging.event.OrderExecutedEvent;
 import ir.ramtung.tinyme.messaging.exception.InvalidRequestException;
+import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -495,5 +496,78 @@ public class StopLimitTest {
                 buyStopLimitOrder, sellOrder);
 
         verify(eventPublisher).publish(new OrderExecutedEvent(0, 55, List.of(new TradeDTO(trade))));
+    }
+
+    @Test
+    void update_order_invalid_if_order_is_activated_and_we_give_stop_limit() {
+        Order matchingSellOrder = new Order(2, security, Side.SELL, 3, 5, broker, shareholder, 0);
+        security.getOrderBook().enqueue(matchingSellOrder);
+
+        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 3, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 0);
+
+        assertThatNoException().isThrownBy(() -> security.newOrder(newOrderRq, broker, shareholder, matcher));
+
+        EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 3);
+
+        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+
+        EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(3, security.getIsin(), 1, LocalDateTime.now(), BUY, 2, 7, 1, shareholder.getShareholderId(), 0, 0, 2);
+        assertThatExceptionOfType(InvalidRequestException.class).isThrownBy(() -> security.updateOrder(updateOrderRq, matcher));
+    }
+
+    @Test
+    void update_order_if_order_is_not_activated_and_order_would_not_get_activated_after_update() {
+        Order matchingSellOrder = new Order(2, security, Side.SELL, 3, 10, broker, shareholder, 0);
+        security.getOrderBook().enqueue(matchingSellOrder);
+
+        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 3, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
+
+        assertThatNoException().isThrownBy(() -> security.newOrder(newOrderRq, broker, shareholder, matcher));
+
+        EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 13);
+
+        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+
+        EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(3, security.getIsin(), 1, LocalDateTime.now(), BUY, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 12);
+        assertThatNoException().isThrownBy(() -> security.updateOrder(updateOrderRq, matcher));
+        assertThat(security.getInactiveOrderBook().getBuyQueue().get(0).getPrice()).isEqualTo(7);
+    }
+
+    @Test
+    void update_order_if_order_is_not_activated_and_order_get_activated_after_update() {
+        Order matchingSellOrder = new Order(2, security, Side.SELL, 3, 10, broker, shareholder, 0);
+        security.getOrderBook().enqueue(matchingSellOrder);
+
+        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 3, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
+
+        assertThatNoException().isThrownBy(() -> security.newOrder(newOrderRq, broker, shareholder, matcher));
+
+        EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 13);
+
+        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+
+        EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(3, security.getIsin(), 1, LocalDateTime.now(), BUY, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 3);
+        assertThatNoException().isThrownBy(() -> security.updateOrder(updateOrderRq, matcher));
+
+        assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
+    }
+
+    @Test
+    void delete_order_stop_limit_order() {
+        Order matchingSellOrder = new Order(2, security, Side.SELL, 3, 10, broker, shareholder, 0);
+        security.getOrderBook().enqueue(matchingSellOrder);
+
+        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 3, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
+
+        assertThatNoException().isThrownBy(() -> security.newOrder(newOrderRq, broker, shareholder, matcher));
+
+        EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 13);
+
+        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+
+        DeleteOrderRq deleteOrderRq = new DeleteOrderRq(3, security.getIsin(), BUY, 1);
+        assertThatNoException().isThrownBy(() -> security.deleteOrder(deleteOrderRq));
+
+        assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
     }
 }
