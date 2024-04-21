@@ -66,6 +66,8 @@ public class OrderHandler {
                 eventPublisher.publish(new OrderUpdatedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId()));
             if (!matchResult.trades().isEmpty()) {
                 eventPublisher.publish(new OrderExecutedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId(), matchResult.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
+                security.checkExecutableOrders(matchResult);
+                security.runExecutableOrders(matcher);
             }
         } catch (InvalidRequestException ex) {
             eventPublisher.publish(new OrderRejectedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId(), ex.getReasons()));
@@ -91,6 +93,8 @@ public class OrderHandler {
             errors.add(Message.ORDER_QUANTITY_NOT_POSITIVE);
         if (enterOrderRq.getPrice() <= 0)
             errors.add(Message.ORDER_PRICE_NOT_POSITIVE);
+        if (enterOrderRq.getStopPrice() < 0)
+            errors.add(Message.ORDER_STOP_PRICE_NEGATIVE);
         Security security = securityRepository.findSecurityByIsin(enterOrderRq.getSecurityIsin());
         if (security == null)
             errors.add(Message.UNKNOWN_SECURITY_ISIN);
@@ -111,6 +115,9 @@ public class OrderHandler {
         }
         if (enterOrderRq.getMinimumExecutionQuantity() > enterOrderRq.getQuantity()){
             errors.add(Message.INVALID_MINIMUM_EXECUTION_QUANTITY);
+        }
+        if (enterOrderRq.getStopPrice() != 0 && enterOrderRq.getMinimumExecutionQuantity() != 0) {
+            errors.add(Message.CANNOT_SPECIFY_MINIMUM_EXECUTION_QUANTITY_FOR_A_STOP_LIMIT_ORDER);
         }
         if (!errors.isEmpty())
             throw new InvalidRequestException(errors);
