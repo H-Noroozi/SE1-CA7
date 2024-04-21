@@ -20,22 +20,26 @@ public class StopLimitOrder extends Order{
 
     StopLimitOrder(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, LocalDateTime entryTime, int minimumExecutionQuantity, int stopPrice){
         this(orderId, security, side, quantity, price, broker, shareholder, entryTime, OrderStatus.NEW, minimumExecutionQuantity, stopPrice);
-        }
-
-    @Override
-    public boolean queuesBefore(Order order) {
-        StopLimitOrder stopLimitOrder = (StopLimitOrder) order;
-        if (order.getSide() == Side.BUY) {
-            return StopPrice < stopLimitOrder.StopPrice;
-        } else {
-            return StopPrice > stopLimitOrder.StopPrice;
-        }
     }
-    public boolean checkIfActive(int lastTransactionPrice){
+
+    public StopLimitOrder(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, int minimumExecutionQuantity, int stopPrice){
+        this(orderId, security, side, quantity, price, broker, shareholder, LocalDateTime.now(), OrderStatus.NEW, minimumExecutionQuantity, stopPrice);
+    }
+
+//    @Override
+//    public boolean queuesBefore(Order order) {
+//        StopLimitOrder stopLimitOrder = (StopLimitOrder) order;
+//        if (order.getSide() == Side.BUY) {
+//            return StopPrice < stopLimitOrder.StopPrice;
+//        } else {
+//            return StopPrice > stopLimitOrder.StopPrice;
+//        }
+//    }
+
+    public boolean mustBeActive(int lastTransactionPrice){
         if (side == Side.BUY)
             return StopPrice < lastTransactionPrice;
         else
             return StopPrice > lastTransactionPrice;
-
     }
 }

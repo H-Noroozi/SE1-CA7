@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 @Getter
@@ -25,6 +26,9 @@ public class Security {
     private InactiveOrderBook inactiveOrderBook = new InactiveOrderBook();
     @Builder.Default
     private int lastTransactionPrice = 0;
+    @Builder.Default
+    private final LinkedList<Order> executableOrders = new LinkedList<>();
+
 
     public MatchResult newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
         if (enterOrderRq.getSide() == Side.SELL &&
@@ -60,13 +64,8 @@ public class Security {
         else
             throw new InvalidRequestException(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
         MatchResult matchResult = matcher.execute(order);
-        if (matchResult.outcome() == MatchingOutcome.EXECUTED) {
-            int previousTransactionPrice = lastTransactionPrice;
+        if((matchResult.outcome() == MatchingOutcome.EXECUTED) && (!matchResult.trades().isEmpty())) {
             lastTransactionPrice = matchResult.trades().getLast().getPrice();
-            if (lastTransactionPrice != previousTransactionPrice) {
-                Side targetSide = (lastTransactionPrice - previousTransactionPrice > 0) ? Side.BUY : Side.SELL;
-
-            }
         }
         return matchResult;
     }
@@ -82,7 +81,6 @@ public class Security {
 
     public MatchResult updateOrder(EnterOrderRq updateOrderRq, Matcher matcher) throws InvalidRequestException {
         Order order = orderBook.findByOrderId(updateOrderRq.getSide(), updateOrderRq.getOrderId());
-        order.markAsUpdated();
         if (order == null)
             throw new InvalidRequestException(Message.ORDER_ID_NOT_FOUND);
         if ((order instanceof IcebergOrder) && updateOrderRq.getPeakSize() == 0)
@@ -91,6 +89,7 @@ public class Security {
             throw new InvalidRequestException(Message.CANNOT_SPECIFY_PEAK_SIZE_FOR_A_NON_ICEBERG_ORDER);
         if (order.getMinimumExecutionQuantity() != updateOrderRq.getMinimumExecutionQuantity())
             throw new InvalidRequestException(Message.CANNOT_CHANGE_MINIMUM_EXECUTION_QUANTITY);
+        order.markAsUpdated();
 
         if (updateOrderRq.getSide() == Side.SELL &&
                 !order.getShareholder().hasEnoughPositionsOn(this,
@@ -124,20 +123,44 @@ public class Security {
             }
         }
         else
-            lastTransactionPrice = matchResult.trades().getLast().getPrice();
+            if(!matchResult.trades().isEmpty())
+                lastTransactionPrice = matchResult.trades().getLast().getPrice();
 
         return matchResult;
     }
 
-    private void findExecutableOrders(Side side){
+    public void checkExecutableOrders(MatchResult matchResult) {
+        int previousTransactionPrice = lastTransactionPrice;
+        lastTransactionPrice = matchResult.trades().getLast().getPrice();
+        if (lastTransactionPrice == previousTransactionPrice) {
+            return;
+        }
+        Side targetSide = (lastTransactionPrice - previousTransactionPrice) > 0 ? Side.BUY : Side.SELL;
+        findExecutableOrders(targetSide);
+    }
+
+    public void findExecutableOrders(Side side){
         while (inactiveOrderBook.hasOrderOfType(side)){
             StopLimitOrder stopLimitOrder = inactiveOrderBook.checkFirstInactiveOrder(side, lastTransactionPrice);
             if(stopLimitOrder == null){
                 return;
             }
+            executableOrders.add(stopLimitOrder);
             inactiveOrderBook.removeFirst(side);
-
         }
     }
+
+    public LinkedList<MatchResult> runExecutableOrders(Matcher matcher){
+        LinkedList<MatchResult> results = new LinkedList<>();
+        while (!executableOrders.isEmpty()){
+            MatchResult matchResult = matcher.execute(executableOrders.removeFirst());
+            if (!matchResult.trades().isEmpty()) {
+                checkExecutableOrders(matchResult);
+            }
+            results.add(matchResult);
+        }
+        return results;
+    }
 }
+
 
