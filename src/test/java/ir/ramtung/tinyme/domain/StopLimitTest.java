@@ -13,6 +13,9 @@ import ir.ramtung.tinyme.messaging.event.OrderExecutedEvent;
 import ir.ramtung.tinyme.messaging.exception.InvalidRequestException;
 import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
+import ir.ramtung.tinyme.repository.BrokerRepository;
+import ir.ramtung.tinyme.repository.SecurityRepository;
+import ir.ramtung.tinyme.repository.ShareholderRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,14 +44,25 @@ public class StopLimitTest {
     Matcher matcher;
     @Autowired
     EventPublisher eventPublisher;
+    @Autowired
+    OrderHandler orderHandler;
+    @Autowired
+    SecurityRepository securityRepository;
+    @Autowired
+    BrokerRepository brokerRepository;
+    @Autowired
+    ShareholderRepository shareholderRepository;
 
     @BeforeEach
     void setupSecurity() {
-        security = Security.builder().build();
-        security.setEventPublisher(eventPublisher);
+        security = Security.builder().isin("ABC").build();
         broker = Broker.builder().brokerId(1).credit(1_000_000L).build();
         shareholder = Shareholder.builder().shareholderId(0).build();
         shareholder.incPosition(security, 100_000_000);
+
+        brokerRepository.addBroker(broker);
+        shareholderRepository.addShareholder(shareholder);
+        securityRepository.addSecurity(security);
 
         Order matchingSellOrder = new Order(2, security, Side.SELL, 3, 5, broker, shareholder, 0);
         security.getOrderBook().enqueue(matchingSellOrder);
@@ -330,49 +344,45 @@ public class StopLimitTest {
     void event_publisher_publish_activated_order_when_order_get_activated_when_its_published() {
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 3);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
-        verify(eventPublisher).publish(new OrderActivatedEvent(1));
+        orderHandler.handleEnterOrder(stopLimitOrderRq);
+
+        verify(eventPublisher).publish(new OrderActivatedEvent(2, 1));
     }
 
     @Test
     void event_publisher_publish_activated_order_when_order_get_activated_when_its_stop_limit_is_met() {
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 55, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 7);
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+
+        orderHandler.handleEnterOrder(stopLimitOrderRq);
 
         Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 10, broker, shareholder, 0);
         security.getOrderBook().enqueue(changingStopLimitSellOrder);
         EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
 
-        security.findExecutableOrders(BUY);
-        security.runExecutableOrders(matcher);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
-        verify(eventPublisher).publish(new OrderActivatedEvent(55));
+        verify(eventPublisher).publish(new OrderActivatedEvent(2, 55));
     }
 
     @Test
     void event_publisher_publish_executed_order_when_order_get_executed() {
-        StopLimitOrder buyStopLimitOrder = new StopLimitOrder(55, security, BUY,3 , 10, broker, shareholder, 0, 6);
+        StopLimitOrder buyStopLimitOrder = new StopLimitOrder(55, security, BUY,3 , 10, broker, shareholder, 0, 6, 1);
 
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 55, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 6);
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
-        assertThat(security.getInactiveOrderBook().getBuyQueue()).isNotEmpty();
-
-        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 7, broker, shareholder, 0);
-        security.getOrderBook().enqueue(changingStopLimitSellOrder);
-        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 4, LocalDateTime.now(), BUY, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq);
 
         Order sellOrder = new Order(34, security, SELL, 3, 10, broker, shareholder, 0);
         security.getOrderBook().enqueue(sellOrder);
 
-        security.findExecutableOrders(BUY);
-        security.runExecutableOrders(matcher);
+        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 7, broker, shareholder, 0);
+        security.getOrderBook().enqueue(changingStopLimitSellOrder);
+        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 4, LocalDateTime.now(), BUY, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 0);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         Trade trade = new Trade(security, sellOrder.getPrice(), sellOrder.getQuantity(),
                 buyStopLimitOrder, sellOrder);
 
-        verify(eventPublisher).publish(new OrderExecutedEvent(0, 55, List.of(new TradeDTO(trade))));
+        verify(eventPublisher).publish(new OrderExecutedEvent(1, 55, List.of(new TradeDTO(trade))));
     }
 
     @Test

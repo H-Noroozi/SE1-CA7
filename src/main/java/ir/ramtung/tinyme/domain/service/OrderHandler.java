@@ -60,14 +60,25 @@ public class OrderHandler {
                 eventPublisher.publish(new OrderRejectedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId(), List.of(Message.BROKER_HAS_NOT_ENOUGH_INITIAL_TRANSACTION)));
                 return;
             }
-            if (enterOrderRq.getRequestType() == OrderEntryType.NEW_ORDER)
+            if (enterOrderRq.getRequestType() == OrderEntryType.NEW_ORDER) {
                 eventPublisher.publish(new OrderAcceptedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId()));
+                if (matchResult.outcome() != MatchingOutcome.QUEUED_AS_INACTIVE_ORDER && enterOrderRq.getStopPrice() != 0) {
+                    eventPublisher.publish(new OrderActivatedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId()));
+                }
+            }
             else
                 eventPublisher.publish(new OrderUpdatedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId()));
             if (!matchResult.trades().isEmpty()) {
                 eventPublisher.publish(new OrderExecutedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId(), matchResult.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
                 security.checkExecutableOrders(matchResult);
-                security.runExecutableOrders(matcher);
+                LinkedList<MatchResult> results = security.runExecutableOrders(matcher);
+                for (MatchResult result : results) {
+                    StopLimitOrder executedOrder = (StopLimitOrder) result.remainder();
+                    eventPublisher.publish(new OrderActivatedEvent(executedOrder.getRequestId(), executedOrder.getOrderId()));
+                    if (!result.trades().isEmpty()){
+                        eventPublisher.publish(new OrderExecutedEvent(executedOrder.getRequestId(), executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
+                    }
+                }
             }
         } catch (InvalidRequestException ex) {
             eventPublisher.publish(new OrderRejectedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId(), ex.getReasons()));
