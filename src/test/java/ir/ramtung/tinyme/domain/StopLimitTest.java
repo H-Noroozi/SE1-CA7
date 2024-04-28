@@ -54,8 +54,8 @@ public class StopLimitTest {
     ShareholderRepository shareholderRepository;
 
     @BeforeEach
-    void setupSecurity() {
-        security = Security.builder().isin("ABC").build();
+    void setup() {
+        security = Security.builder().isin("ABC").lastTransactionPrice(5).build();
         broker = Broker.builder().brokerId(1).credit(1_000_000L).build();
         shareholder = Shareholder.builder().shareholderId(0).build();
         shareholder.incPosition(security, 100_000_000);
@@ -63,12 +63,6 @@ public class StopLimitTest {
         brokerRepository.addBroker(broker);
         shareholderRepository.addShareholder(shareholder);
         securityRepository.addSecurity(security);
-
-        Order matchingSellOrder = new Order(2, security, Side.SELL, 3, 5, broker, shareholder, 0);
-        security.getOrderBook().enqueue(matchingSellOrder);
-
-        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 0);
-        orderHandler.handleEnterOrder(newOrderRq);
     }
 
     @Test
@@ -78,7 +72,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(stopLimitOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(5);
     }
 
     @Test
@@ -88,7 +81,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(stopLimitOrderRq);
 
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(5);
     }
 
     @Test
