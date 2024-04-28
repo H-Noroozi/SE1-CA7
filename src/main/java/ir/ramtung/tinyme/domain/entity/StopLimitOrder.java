@@ -13,18 +13,20 @@ import java.time.LocalDateTime;
 public class StopLimitOrder extends Order{
 
     protected int StopPrice;
+    protected long requestId;
 
-    StopLimitOrder(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, LocalDateTime entryTime, OrderStatus status, int minimumExecutionQuantity, int stopPrice) {
+    StopLimitOrder(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, LocalDateTime entryTime, OrderStatus status, int minimumExecutionQuantity, int stopPrice, long requestId) {
         super(orderId, security, side, quantity, price, broker, shareholder, entryTime, status, minimumExecutionQuantity);
         this.StopPrice = stopPrice;
+        this.requestId = requestId;
     }
 
-    StopLimitOrder(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, LocalDateTime entryTime, int minimumExecutionQuantity, int stopPrice){
-        this(orderId, security, side, quantity, price, broker, shareholder, entryTime, OrderStatus.NEW, minimumExecutionQuantity, stopPrice);
+    StopLimitOrder(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, LocalDateTime entryTime, int minimumExecutionQuantity, int stopPrice, long requestId){
+        this(orderId, security, side, quantity, price, broker, shareholder, entryTime, OrderStatus.NEW, minimumExecutionQuantity, stopPrice, requestId);
     }
 
-    public StopLimitOrder(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, int minimumExecutionQuantity, int stopPrice){
-        this(orderId, security, side, quantity, price, broker, shareholder, LocalDateTime.now(), OrderStatus.NEW, minimumExecutionQuantity, stopPrice);
+    public StopLimitOrder(long orderId, Security security, Side side, int quantity, int price, Broker broker, Shareholder shareholder, int minimumExecutionQuantity, int stopPrice, long requestId){
+        this(orderId, security, side, quantity, price, broker, shareholder, LocalDateTime.now(), OrderStatus.NEW, minimumExecutionQuantity, stopPrice, requestId);
     }
 
     @Override
@@ -53,7 +55,7 @@ public class StopLimitOrder extends Order{
 
     @Override
     public Order snapshot() {
-        return new StopLimitOrder(orderId, security, side, quantity, price, broker, shareholder, entryTime, OrderStatus.SNAPSHOT, minimumExecutionQuantity, StopPrice);
+        return new StopLimitOrder(orderId, security, side, quantity, price, broker, shareholder, entryTime, OrderStatus.SNAPSHOT, minimumExecutionQuantity, StopPrice, requestId);
     }
 
 }

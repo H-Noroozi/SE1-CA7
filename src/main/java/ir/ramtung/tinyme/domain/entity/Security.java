@@ -36,8 +36,6 @@ public class Security {
     private int lastTransactionPrice = 0;
     @Builder.Default
     private final LinkedList<Order> executableOrders = new LinkedList<>();
-    @Setter
-    private EventPublisher eventPublisher;
 
 
     public MatchResult newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
@@ -57,10 +55,9 @@ public class Security {
             StopLimitOrder stopLimitOrder = new StopLimitOrder(enterOrderRq.getOrderId(), this, enterOrderRq.getSide(),
                     enterOrderRq.getQuantity(), enterOrderRq.getPrice(), broker, shareholder,
                     enterOrderRq.getEntryTime(), enterOrderRq.getMinimumExecutionQuantity(),
-                    enterOrderRq.getStopPrice());
+                    enterOrderRq.getStopPrice(), enterOrderRq.getRequestId());
             if ( (stopLimitOrder.getSide() == Side.BUY && stopLimitOrder.getStopPrice() <= lastTransactionPrice) || (stopLimitOrder.getSide() == Side.SELL && stopLimitOrder.getStopPrice() >= lastTransactionPrice) ){
                 order = stopLimitOrder;
-                eventPublisher.publish(new OrderActivatedEvent(stopLimitOrder.orderId));
             }
             else{
                 if (stopLimitOrder.getSide() == Side.BUY) {
@@ -75,9 +72,6 @@ public class Security {
         else
             throw new InvalidRequestException(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
         MatchResult matchResult = matcher.execute(order);
-        if((matchResult.outcome() == MatchingOutcome.EXECUTED) && (!matchResult.trades().isEmpty())) {
-            lastTransactionPrice = matchResult.trades().getLast().getPrice();
-        }
         return matchResult;
     }
 
@@ -129,7 +123,6 @@ public class Security {
             if (stopLimitOrder.mustBeActive(lastTransactionPrice)){
                 inactiveOrderBook.removeByOrderId(stopLimitOrder.getSide(), stopLimitOrder.getOrderId());
                 MatchResult matchResult = matcher.execute((Order) stopLimitOrder);
-                eventPublisher.publish(new OrderActivatedEvent(stopLimitOrder.orderId));
                 return matchResult;
             }
             else {
@@ -186,7 +179,6 @@ public class Security {
                 return;
             }
             executableOrders.add(stopLimitOrder);
-            eventPublisher.publish(new OrderActivatedEvent(stopLimitOrder.orderId));
             inactiveOrderBook.removeFirst(side);
         }
     }
@@ -194,11 +186,10 @@ public class Security {
     public LinkedList<MatchResult> runExecutableOrders(Matcher matcher){
         LinkedList<MatchResult> results = new LinkedList<>();
         while (!executableOrders.isEmpty()){
-            long orderId = executableOrders.getFirst().getOrderId();
-            MatchResult matchResult = matcher.execute(executableOrders.removeFirst());
+            StopLimitOrder executableOrder = (StopLimitOrder) executableOrders.removeFirst();
+            MatchResult matchResult = matcher.execute(executableOrder);
             if (!matchResult.trades().isEmpty()) {
                 checkExecutableOrders(matchResult);
-                eventPublisher.publish(new OrderExecutedEvent(0, orderId, matchResult.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
             }
             results.add(matchResult);
         }
