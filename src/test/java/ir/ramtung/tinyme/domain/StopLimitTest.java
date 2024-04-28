@@ -68,14 +68,15 @@ public class StopLimitTest {
         security.getOrderBook().enqueue(matchingSellOrder);
 
         EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(newOrderRq, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(newOrderRq);
     }
 
     @Test
     void new_buy_order_gets_activated_when_stop_limit_is_less_than_last_transaction_price() {
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 3);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq);
+
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
         assertThat(security.getLastTransactionPrice()).isEqualTo(5);
     }
@@ -84,7 +85,8 @@ public class StopLimitTest {
     void new_sell_order_gets_activated_when_stop_limit_is_more_than_last_transaction_price() {
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), SELL, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 7);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq);
+
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
         assertThat(security.getLastTransactionPrice()).isEqualTo(5);
     }
@@ -93,16 +95,14 @@ public class StopLimitTest {
     void new_buy_order_gets_activated_when_last_transaction_price_becomes_more_than_stop_limit() {
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 7);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq);
+
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isNotEmpty();
 
         Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 10, broker, shareholder, 0);
         security.getOrderBook().enqueue(changingStopLimitSellOrder);
         EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
-
-        security.findExecutableOrders(BUY);
-        security.runExecutableOrders(matcher);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
         assertThat(security.getLastTransactionPrice()).isEqualTo(10);
@@ -112,16 +112,13 @@ public class StopLimitTest {
     void new_sell_order_gets_activated_when_last_transaction_price_became_less_than_stop_limit() {
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), SELL, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 4);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq);
         assertThat(security.getInactiveOrderBook().getSellQueue()).isNotEmpty();
 
         Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 3, broker, shareholder, 0);
         security.getOrderBook().enqueue(changingStopLimitSellOrder);
         EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 3, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
-
-        security.findExecutableOrders(SELL);
-        security.runExecutableOrders(matcher);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
         assertThat(security.getLastTransactionPrice()).isEqualTo(3);
@@ -132,17 +129,14 @@ public class StopLimitTest {
         EnterOrderRq stopLimitOrderRq1 = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 7);
         EnterOrderRq stopLimitOrderRq2 = EnterOrderRq.createNewOrderRq(2, "ABC", 2, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 9);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq1, broker, shareholder, matcher));
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq2, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq1);
+        orderHandler.handleEnterOrder(stopLimitOrderRq2);
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isNotEmpty();
 
         Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 8, broker, shareholder, 0);
         security.getOrderBook().enqueue(changingStopLimitSellOrder);
         EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 8, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
-
-        security.findExecutableOrders(BUY);
-        security.runExecutableOrders(matcher);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue().get(0).getOrderId()).isEqualTo(2);
         assertThat(security.getLastTransactionPrice()).isEqualTo(8);
@@ -153,17 +147,14 @@ public class StopLimitTest {
         EnterOrderRq stopLimitOrderRq1 = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), SELL, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 4);
         EnterOrderRq stopLimitOrderRq2 = EnterOrderRq.createNewOrderRq(2, "ABC", 2, LocalDateTime.now(), SELL, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 2);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq1, broker, shareholder, matcher));
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq2, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq1);
+        orderHandler.handleEnterOrder(stopLimitOrderRq2);
         assertThat(security.getInactiveOrderBook().getSellQueue()).isNotEmpty();
 
         Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 3, broker, shareholder, 0);
         security.getOrderBook().enqueue(changingStopLimitSellOrder);
         EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 3, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
-
-        security.findExecutableOrders(SELL);
-        security.runExecutableOrders(matcher);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getSellQueue().get(0).getOrderId()).isEqualTo(2);
         assertThat(security.getLastTransactionPrice()).isEqualTo(3);
@@ -174,20 +165,17 @@ public class StopLimitTest {
         EnterOrderRq stopLimitOrderRq1 = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 2, 1, shareholder.getShareholderId(), 0, 0, 7);
         EnterOrderRq stopLimitOrderRq2 = EnterOrderRq.createNewOrderRq(2, "ABC", 2, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 9);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq1, broker, shareholder, matcher));
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq2, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq1);
+        orderHandler.handleEnterOrder(stopLimitOrderRq2);
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isNotEmpty();
-
-        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 10, broker, shareholder, 0);
-        security.getOrderBook().enqueue(changingStopLimitSellOrder);
-        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
 
         Order sellOrder = new Order(34, security, SELL, 3, 2, broker, shareholder, 0);
         security.getOrderBook().enqueue(sellOrder);
 
-        security.findExecutableOrders(BUY);
-        security.runExecutableOrders(matcher);
+        Order changingStopLimitSellOrder = new Order(3, security, BUY, 3, 10, broker, shareholder, 0);
+        security.getOrderBook().enqueue(changingStopLimitSellOrder);
+        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 3, LocalDateTime.now(), SELL, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
         assertThat(security.getLastTransactionPrice()).isEqualTo(2);
@@ -198,20 +186,17 @@ public class StopLimitTest {
         EnterOrderRq stopLimitOrderRq1 = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), SELL, 3, 15, 1, shareholder.getShareholderId(), 0, 0, 2);
         EnterOrderRq stopLimitOrderRq2 = EnterOrderRq.createNewOrderRq(2, "ABC", 2, LocalDateTime.now(), SELL, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 4);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq1, broker, shareholder, matcher));
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq2, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq1);
+        orderHandler.handleEnterOrder(stopLimitOrderRq2);
         assertThat(security.getInactiveOrderBook().getSellQueue()).isNotEmpty();
-
-        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 1, broker, shareholder, 0);
-        security.getOrderBook().enqueue(changingStopLimitSellOrder);
-        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 1, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
 
         Order buyOrder = new Order(34, security, BUY, 3, 15, broker, shareholder, 0);
         security.getOrderBook().enqueue(buyOrder);
 
-        security.findExecutableOrders(SELL);
-        security.runExecutableOrders(matcher);
+        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 1, broker, shareholder, 0);
+        security.getOrderBook().enqueue(changingStopLimitSellOrder);
+        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 1, 1, shareholder.getShareholderId(), 0, 0, 0);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
         assertThat(security.getLastTransactionPrice()).isEqualTo(15);
@@ -222,20 +207,17 @@ public class StopLimitTest {
         EnterOrderRq stopLimitOrderRq1 = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 6);
         EnterOrderRq stopLimitOrderRq2 = EnterOrderRq.createNewOrderRq(2, "ABC", 2, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 9);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq1, broker, shareholder, matcher));
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq2, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq1);
+        orderHandler.handleEnterOrder(stopLimitOrderRq2);
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isNotEmpty();
-
-        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 7, broker, shareholder, 0);
-        security.getOrderBook().enqueue(changingStopLimitSellOrder);
-        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
 
         Order sellOrder = new Order(34, security, SELL, 3, 10, broker, shareholder, 0);
         security.getOrderBook().enqueue(sellOrder);
 
-        security.findExecutableOrders(BUY);
-        security.runExecutableOrders(matcher);
+        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 7, broker, shareholder, 0);
+        security.getOrderBook().enqueue(changingStopLimitSellOrder);
+        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 0);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
         assertThat(security.getLastTransactionPrice()).isEqualTo(10);
@@ -246,20 +228,18 @@ public class StopLimitTest {
         EnterOrderRq stopLimitOrderRq1 = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), SELL, 3, 1, 1, shareholder.getShareholderId(), 0, 0, 4);
         EnterOrderRq stopLimitOrderRq2 = EnterOrderRq.createNewOrderRq(2, "ABC", 2, LocalDateTime.now(), SELL, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 2);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq1, broker, shareholder, matcher));
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq2, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRq1);
+        orderHandler.handleEnterOrder(stopLimitOrderRq2);
         assertThat(security.getInactiveOrderBook().getSellQueue()).isNotEmpty();
 
-        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 3, broker, shareholder, 0);
-        security.getOrderBook().enqueue(changingStopLimitSellOrder);
-        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 3, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
 
         Order buyOrder = new Order(34, security, BUY, 3, 1, broker, shareholder, 0);
         security.getOrderBook().enqueue(buyOrder);
 
-        security.findExecutableOrders(SELL);
-        security.runExecutableOrders(matcher);
+        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 3, broker, shareholder, 0);
+        security.getOrderBook().enqueue(changingStopLimitSellOrder);
+        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 3, 1, shareholder.getShareholderId(), 0, 0, 0);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
         assertThat(security.getLastTransactionPrice()).isEqualTo(1);
@@ -270,23 +250,18 @@ public class StopLimitTest {
         EnterOrderRq stopLimitOrderRqBuy = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 2, 1, shareholder.getShareholderId(), 0, 0, 6);
         EnterOrderRq stopLimitOrderRqSell = EnterOrderRq.createNewOrderRq(2, "ABC", 2, LocalDateTime.now(), SELL, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 3);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRqBuy, broker, shareholder, matcher));
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRqSell, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRqBuy);
+        orderHandler.handleEnterOrder(stopLimitOrderRqSell);
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isNotEmpty();
         assertThat(security.getInactiveOrderBook().getSellQueue()).isNotEmpty();
-
-        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 7, broker, shareholder, 0);
-        security.getOrderBook().enqueue(changingStopLimitSellOrder);
-        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
 
         Order sellOrder = new Order(34, security, SELL, 3, 2, broker, shareholder, 0);
         security.getOrderBook().enqueue(sellOrder);
 
-        security.findExecutableOrders(BUY);
-        security.runExecutableOrders(matcher);
-        security.findExecutableOrders(SELL);
-        security.runExecutableOrders(matcher);
+        Order changingStopLimitSellOrder = new Order(3, security, BUY, 3, 7, broker, shareholder, 0);
+        security.getOrderBook().enqueue(changingStopLimitSellOrder);
+        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), SELL, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 0);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
@@ -298,23 +273,18 @@ public class StopLimitTest {
         EnterOrderRq stopLimitOrderRqBuy = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 2, 1, shareholder.getShareholderId(), 0, 0, 6);
         EnterOrderRq stopLimitOrderRqSell = EnterOrderRq.createNewOrderRq(2, "ABC", 2, LocalDateTime.now(), SELL, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 3);
 
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRqBuy, broker, shareholder, matcher));
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRqSell, broker, shareholder, matcher));
+        orderHandler.handleEnterOrder(stopLimitOrderRqBuy);
+        orderHandler.handleEnterOrder(stopLimitOrderRqSell);
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isNotEmpty();
         assertThat(security.getInactiveOrderBook().getSellQueue()).isNotEmpty();
-
-        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 2, broker, shareholder, 0);
-        security.getOrderBook().enqueue(changingStopLimitSellOrder);
-        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 2, 1, shareholder.getShareholderId(), 0, 0, 0);
-        assertThatNoException().isThrownBy(() -> security.newOrder(ChangingStopLimitnewOrderRq, broker, shareholder, matcher));
 
         Order buyOrder = new Order(34, security, BUY, 3, 7, broker, shareholder, 0);
         security.getOrderBook().enqueue(buyOrder);
 
-        security.findExecutableOrders(SELL);
-        security.runExecutableOrders(matcher);
-        security.findExecutableOrders(BUY);
-        security.runExecutableOrders(matcher);
+        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 2, broker, shareholder, 0);
+        security.getOrderBook().enqueue(changingStopLimitSellOrder);
+        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 2, 1, shareholder.getShareholderId(), 0, 0, 0);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
@@ -413,6 +383,17 @@ public class StopLimitTest {
         EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(3, security.getIsin(), 1, LocalDateTime.now(), BUY, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 3);
         assertThatNoException().isThrownBy(() -> security.updateOrder(updateOrderRq, matcher));
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
+    }
+
+    @Test
+    void event_publisher_publish_activated_order_when_order_get_activated_after_update() {
+        EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 13);
+        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+
+        EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(3, security.getIsin(), 1, LocalDateTime.now(), BUY, 3, 7, 1, shareholder.getShareholderId(), 0, 0, 3);
+        orderHandler.handleEnterOrder(updateOrderRq);
+
+        verify(eventPublisher).publish(new OrderActivatedEvent(3, 1));
     }
 
     @Test

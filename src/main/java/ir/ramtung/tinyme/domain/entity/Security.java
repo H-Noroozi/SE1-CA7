@@ -36,8 +36,6 @@ public class Security {
     private int lastTransactionPrice = 0;
     @Builder.Default
     private final LinkedList<Order> executableOrders = new LinkedList<>();
-    @Setter
-    private EventPublisher eventPublisher;
 
 
     public MatchResult newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
@@ -125,7 +123,6 @@ public class Security {
             if (stopLimitOrder.mustBeActive(lastTransactionPrice)){
                 inactiveOrderBook.removeByOrderId(stopLimitOrder.getSide(), stopLimitOrder.getOrderId());
                 MatchResult matchResult = matcher.execute((Order) stopLimitOrder);
-                eventPublisher.publish(new OrderActivatedEvent(stopLimitOrder.getRequestId(), stopLimitOrder.orderId));
                 return matchResult;
             }
             else {
