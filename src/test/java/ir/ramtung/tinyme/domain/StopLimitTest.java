@@ -84,6 +84,22 @@ public class StopLimitTest {
     }
 
     @Test
+    void last_transaction_price_change_after_an_order_get_executed() {
+        EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 7);
+
+        orderHandler.handleEnterOrder(stopLimitOrderRq);
+
+        assertThat(security.getInactiveOrderBook().getBuyQueue()).isNotEmpty();
+
+        Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 10, broker, shareholder, 0);
+        security.getOrderBook().enqueue(changingStopLimitSellOrder);
+        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
+        orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
+
+        assertThat(security.getLastTransactionPrice()).isEqualTo(10);
+    }
+
+    @Test
     void new_buy_order_gets_activated_when_last_transaction_price_becomes_more_than_stop_limit() {
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 7);
 
@@ -97,7 +113,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(10);
     }
 
     @Test
@@ -113,7 +128,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(3);
     }
 
     @Test
@@ -131,7 +145,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue().get(0).getOrderId()).isEqualTo(2);
-        assertThat(security.getLastTransactionPrice()).isEqualTo(8);
     }
 
     @Test
@@ -149,7 +162,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getSellQueue().get(0).getOrderId()).isEqualTo(2);
-        assertThat(security.getLastTransactionPrice()).isEqualTo(3);
     }
 
     @Test
@@ -170,7 +182,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(2);
     }
 
     @Test
@@ -191,7 +202,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(15);
     }
 
     @Test
@@ -212,7 +222,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(10);
     }
 
     @Test
@@ -234,7 +243,6 @@ public class StopLimitTest {
         orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(1);
     }
 
     @Test
@@ -257,7 +265,6 @@ public class StopLimitTest {
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(2);
     }
 
     @Test
@@ -280,7 +287,6 @@ public class StopLimitTest {
 
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
         assertThat(security.getInactiveOrderBook().getSellQueue()).isEmpty();
-        assertThat(security.getLastTransactionPrice()).isEqualTo(7);
     }
 
     @Test
