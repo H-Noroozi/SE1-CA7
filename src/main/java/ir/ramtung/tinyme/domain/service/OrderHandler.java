@@ -76,7 +76,13 @@ public class OrderHandler {
             if (matchResult.outcome() == MatchingOutcome.AUCTIONED) {
                     OpeningData openingData = security.findOpeningData();
                     eventPublisher.publish(new OpeningPriceEvent(security.getIsin(), openingData.getOpeningPrice(), openingData.getTradableQuantity()));
-
+                    LinkedList<MatchResult> results = security.runAuctionedOrders(matcher);
+                    for (MatchResult result : results) {
+                        Order executedOrder = result.remainder();
+                        if (!result.trades().isEmpty()){
+                            eventPublisher.publish(new OrderExecutedEvent(69, executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
+                        }
+                    }
             }
             if (!matchResult.trades().isEmpty()) {
                 eventPublisher.publish(new OrderExecutedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId(), matchResult.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
