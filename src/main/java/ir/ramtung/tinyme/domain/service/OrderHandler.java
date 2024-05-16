@@ -6,10 +6,7 @@ import ir.ramtung.tinyme.messaging.exception.InvalidRequestException;
 import ir.ramtung.tinyme.messaging.EventPublisher;
 import ir.ramtung.tinyme.messaging.TradeDTO;
 import ir.ramtung.tinyme.messaging.event.*;
-import ir.ramtung.tinyme.messaging.request.ChangeMatchingStateRq;
-import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
-import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
-import ir.ramtung.tinyme.messaging.request.OrderEntryType;
+import ir.ramtung.tinyme.messaging.request.*;
 import ir.ramtung.tinyme.repository.BrokerRepository;
 import ir.ramtung.tinyme.repository.SecurityRepository;
 import ir.ramtung.tinyme.repository.ShareholderRepository;
@@ -83,10 +80,18 @@ public class OrderHandler {
                             eventPublisher.publish(new OrderExecutedEvent(69, executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
                         }
                     }
+                    if (!results.isEmpty()){
+                        security.checkExecutableOrders(results.get(0).trades().getLast().getPrice());
+                        LinkedList<MatchResult> matchResults = security.enqueueExecutableOrders();
+                        for (MatchResult result : matchResults) {
+                            StopLimitOrder activatedOrder = (StopLimitOrder) result.remainder();
+                            eventPublisher.publish(new OrderActivatedEvent(activatedOrder.getRequestId(), activatedOrder.getOrderId()));
+                        }
+                    }
             }
             if (!matchResult.trades().isEmpty()) {
                 eventPublisher.publish(new OrderExecutedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId(), matchResult.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
-                security.checkExecutableOrders(matchResult);
+                security.checkExecutableOrders(matchResult.trades().getLast().getPrice());
                 LinkedList<MatchResult> results = security.runExecutableOrders(matcher);
                 for (MatchResult result : results) {
                     StopLimitOrder executedOrder = (StopLimitOrder) result.remainder();
@@ -118,8 +123,32 @@ public class OrderHandler {
             return;
             // It must change.
         }
+        if (security.getState() == MatchingState.AUCTION){
+            LinkedList<MatchResult> results = security.runAuctionedOrders(matcher);
+            for (MatchResult result : results) {
+                Order executedOrder = result.remainder();
+                if (!result.trades().isEmpty()){
+                    eventPublisher.publish(new OrderExecutedEvent(69, executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
+                }
+            }
+            security.checkExecutableOrders(results.get(0).trades().getLast().getPrice());
+            if (changeMatchingStateRq.getTargetState() == MatchingState.AUCTION){
+                LinkedList<MatchResult> matchResults = security.enqueueExecutableOrders();
+            }
+            else {
+                LinkedList<MatchResult> matchResults = security.runExecutableOrders(matcher);
+            }
+            for (MatchResult result : results) {
+                StopLimitOrder executedOrder = (StopLimitOrder) result.remainder();
+                eventPublisher.publish(new OrderActivatedEvent(executedOrder.getRequestId(), executedOrder.getOrderId()));
+                if (!result.trades().isEmpty()){
+                    eventPublisher.publish(new OrderExecutedEvent(executedOrder.getRequestId(), executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
+                }
+            }
+        }
         security.changeMatchingState(changeMatchingStateRq.getTargetState());
         eventPublisher.publish(new SecurityStateChangedEvent(changeMatchingStateRq.getSecurityIsin(), changeMatchingStateRq.getTargetState()));
+
     }
 
     private void validateEnterOrderRq(EnterOrderRq enterOrderRq) throws InvalidRequestException {

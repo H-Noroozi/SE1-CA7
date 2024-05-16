@@ -171,9 +171,9 @@ public class Security {
         return matchResult;
     }
 
-    public void checkExecutableOrders(MatchResult matchResult) {
+    public void checkExecutableOrders(int tradePrice) {
         int previousTransactionPrice = lastTransactionPrice;
-        lastTransactionPrice = matchResult.trades().getLast().getPrice();
+        lastTransactionPrice = tradePrice;
         if (lastTransactionPrice == previousTransactionPrice) {
             return;
         }
@@ -190,6 +190,16 @@ public class Security {
             executableOrders.add(stopLimitOrder);
             inactiveOrderBook.removeFirst(side);
         }
+    }
+
+    public LinkedList<MatchResult> enqueueExecutableOrders(){
+        LinkedList<MatchResult> results = new LinkedList<>();
+        while (!executableOrders.isEmpty()){
+            StopLimitOrder executableOrder = (StopLimitOrder) executableOrders.removeFirst();
+            orderBook.enqueue(executableOrder);
+            results.add(MatchResult.activated(executableOrder));
+        }
+        return results;
     }
 
     public LinkedList<MatchResult> runExecutableOrders(Matcher matcher){
@@ -217,7 +227,7 @@ public class Security {
     }
 
     public void changeMatchingState(MatchingState targetState){
-        if (state == MatchingState.AUCTION){
+        if (state == MatchingState.AUCTION && targetState == MatchingState.AUCTION){
             // Do opening process
         }
         state = targetState;

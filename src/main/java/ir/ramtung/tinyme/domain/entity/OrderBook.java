@@ -118,36 +118,6 @@ public class OrderBook {
         }
         return new OpeningRangeData(minOpeningPrice, maxOpeningPrice, maxTradeQuantity);
     }
-    public List<OpeningData> indPriceBasedOnMaxTransaction() {
-        List<OpeningData> possiblePrices = new ArrayList<OpeningData>();
-        int maxTradeQuantity = 0;
-        int sellQuantity = 0, buyQuantity = 0;
-        ListIterator<Order> buyQueueIt = buyQueue.listIterator();
-        ListIterator<Order> sellQueueIt = sellQueue.listIterator();
-        while (sellQueueIt.hasNext()) {
-            Order order = sellQueueIt.next();
-            sellQuantity += order.getTotalQuantity();
-        }
-        while (sellQueueIt.hasPrevious()) {
-            Order sellOrder = sellQueueIt.previous();
-            while (buyQueueIt.hasNext()) {
-                Order buyOrder = buyQueueIt.next();
-                if (sellOrder.getPrice() <= buyOrder.getPrice()) {
-                    buyQuantity += buyOrder.getQuantity();
-                }
-                else
-                    break;
-            }
-            if (min(sellQuantity, buyQuantity) > maxTradeQuantity) {
-                maxTradeQuantity = min(sellQuantity, buyQuantity);
-                possiblePrices.clear();
-                possiblePrices.add(new OpeningData(sellOrder.getPrice(), maxTradeQuantity));
-            }
-            else if (min(sellQuantity, buyQuantity) == sellOrder.getPrice())
-                possiblePrices.add(new OpeningData(sellOrder.getPrice(), maxTradeQuantity));
-            sellQuantity -= sellOrder.getQuantity();
-        }
-        return possiblePrices;
-    }
+
 
 }
