@@ -1,24 +1,20 @@
 package ir.ramtung.tinyme.domain.entity;
 
-import ir.ramtung.tinyme.messaging.TradeDTO;
-import ir.ramtung.tinyme.messaging.event.OrderAcceptedEvent;
-import ir.ramtung.tinyme.messaging.event.OrderActivatedEvent;
-import ir.ramtung.tinyme.messaging.event.OrderExecutedEvent;
 import ir.ramtung.tinyme.messaging.exception.InvalidRequestException;
 import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
 import ir.ramtung.tinyme.domain.service.Matcher;
 import ir.ramtung.tinyme.messaging.Message;
+import ir.ramtung.tinyme.messaging.request.MatchingState;
 import lombok.Builder;
 import lombok.Getter;
 
-import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.stream.Collectors;
 
-import ir.ramtung.tinyme.messaging.EventPublisher;
-import lombok.Setter;
+import static java.lang.Math.abs;
 
 @Getter
 @Builder
@@ -36,6 +32,8 @@ public class Security {
     private int lastTransactionPrice = 0;
     @Builder.Default
     private final LinkedList<Order> executableOrders = new LinkedList<>();
+    @Builder.Default
+    private MatchingState state = MatchingState.CONTINUOUS;
 
 
     public MatchResult newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
@@ -52,6 +50,9 @@ public class Security {
                     enterOrderRq.getQuantity(), enterOrderRq.getPrice(), broker, shareholder,
                     enterOrderRq.getEntryTime(), enterOrderRq.getPeakSize(), enterOrderRq.getMinimumExecutionQuantity());
         else if (enterOrderRq.getStopPrice() != 0 && enterOrderRq.getPeakSize() == 0) {
+            if (state == MatchingState.AUCTION){
+                throw new InvalidRequestException(Message.CANNOT_REQUEST_STOP_LIMIT_ORDER_IN_AUCTION_STATE);
+            }
             StopLimitOrder stopLimitOrder = new StopLimitOrder(enterOrderRq.getOrderId(), this, enterOrderRq.getSide(),
                     enterOrderRq.getQuantity(), enterOrderRq.getPrice(), broker, shareholder,
                     enterOrderRq.getEntryTime(), enterOrderRq.getMinimumExecutionQuantity(),
@@ -71,6 +72,15 @@ public class Security {
         }
         else
             throw new InvalidRequestException(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
+        if (state == MatchingState.AUCTION){
+            if (order.getSide() == Side.BUY) {
+                if (!order.getBroker().hasEnoughCredit(order.getValue())) {
+                    return MatchResult.notEnoughCredit();
+                }
+            }
+            orderBook.enqueue(order);
+            return MatchResult.auctioned();
+        }
         MatchResult matchResult = matcher.execute(order);
         return matchResult;
     }
@@ -122,8 +132,7 @@ public class Security {
         if (order instanceof StopLimitOrder stopLimitOrder) {
             if (stopLimitOrder.mustBeActive(lastTransactionPrice)){
                 inactiveOrderBook.removeByOrderId(stopLimitOrder.getSide(), stopLimitOrder.getOrderId());
-                MatchResult matchResult = matcher.execute((Order) stopLimitOrder);
-                return matchResult;
+                return matcher.execute((Order) stopLimitOrder);
             }
             else {
                 if (stopLimitOrder.getStopPrice() != ((StopLimitOrder) originalOrder).getStopPrice()){
@@ -194,6 +203,32 @@ public class Security {
             results.add(matchResult);
         }
         return results;
+    }
+
+    public OpeningData findOpeningData(){
+         return findMinimumPrice(findClosestPriceToLastTransaction(orderBook.findPriceBasedOnMaxTransaction()));
+    }
+    private List<OpeningData> findClosestPriceToLastTransaction(List<OpeningData> possiblePrices){
+        var it = possiblePrices.listIterator();
+        int closestPrice = Integer.MAX_VALUE;
+        while (it.hasNext()){
+            OpeningData openingData = it.next();
+            if (abs(openingData.getOpeningPrice() - lastTransactionPrice) < closestPrice)
+                closestPrice = abs(openingData.getOpeningPrice() - lastTransactionPrice);
+            else
+                it.remove();
+        }
+        return possiblePrices;
+    }
+    private OpeningData findMinimumPrice(List<OpeningData> possiblePrices){
+        return possiblePrices.stream().min(Comparator.comparingInt(OpeningData::getOpeningPrice)).orElse(null);
+    }
+
+    public void changeMatchingState(MatchingState targetState){
+        if (state == MatchingState.AUCTION){
+            // Do opening process
+        }
+        state = targetState;
     }
 }
 

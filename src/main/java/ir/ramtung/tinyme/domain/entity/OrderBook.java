@@ -2,9 +2,8 @@ package ir.ramtung.tinyme.domain.entity;
 
 import lombok.Getter;
 
-import java.util.LinkedList;
-import java.util.List;
-import java.util.ListIterator;
+import java.util.*;
+import static java.lang.Math.min;
 
 @Getter
 public class OrderBook {
@@ -68,9 +67,9 @@ public class OrderBook {
         queue.addFirst(order);
     }
 
-    public void restoreSellOrder(Order sellOrder) {
-        removeByOrderId(Side.SELL, sellOrder.getOrderId());
-        putBack(sellOrder);
+    public void restoreOrder(Order order) {
+        removeByOrderId(order.getSide(), order.getOrderId());
+        putBack(order);
     }
 
     public boolean hasOrderOfType(Side side) {
@@ -87,4 +86,38 @@ public class OrderBook {
                 .mapToInt(Order::getTotalQuantity)
                 .sum();
     }
+
+    //int sellQuantity = sellQueue.stream().mapToInt(Order::getTotalQuantity).sum();
+    public List<OpeningData> findPriceBasedOnMaxTransaction() {
+        List<OpeningData> possiblePrices = new ArrayList<OpeningData>();
+        int maxTradeQuantity = 0;
+        int sellQuantity = 0, buyQuantity = 0;
+        ListIterator<Order> buyQueueIt = buyQueue.listIterator();
+        ListIterator<Order> sellQueueIt = sellQueue.listIterator();
+        while (sellQueueIt.hasNext()) {
+            Order order = sellQueueIt.next();
+            sellQuantity += order.getTotalQuantity();
+        }
+        while (sellQueueIt.hasPrevious()) {
+            Order sellOrder = sellQueueIt.previous();
+            while (buyQueueIt.hasNext()) {
+                Order buyOrder = buyQueueIt.next();
+                if (sellOrder.getPrice() <= buyOrder.getPrice()) {
+                    buyQuantity += buyOrder.getQuantity();
+                }
+                else
+                    break;
+            }
+            if (min(sellQuantity, buyQuantity) > maxTradeQuantity) {
+                maxTradeQuantity = min(sellQuantity, buyQuantity);
+                possiblePrices.clear();
+                possiblePrices.add(new OpeningData(sellOrder.getPrice(), maxTradeQuantity));
+            }
+            else if (min(sellQuantity, buyQuantity) == sellOrder.getPrice())
+                possiblePrices.add(new OpeningData(sellOrder.getPrice(), maxTradeQuantity));
+            sellQuantity -= sellOrder.getQuantity();
+        }
+        return possiblePrices;
+    }
+
 }
