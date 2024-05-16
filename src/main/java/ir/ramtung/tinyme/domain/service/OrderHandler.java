@@ -71,8 +71,7 @@ public class OrderHandler {
                 }
             }
             if (matchResult.outcome() == MatchingOutcome.AUCTIONED) {
-                    OpeningData openingData = security.findOpeningData();
-                    eventPublisher.publish(new OpeningPriceEvent(security.getIsin(), openingData.getOpeningPrice(), openingData.getTradableQuantity()));
+
                     LinkedList<MatchResult> results = security.runAuctionedOrders(matcher);
                     for (MatchResult result : results) {
                         Order executedOrder = result.remainder();

@@ -74,10 +74,10 @@ public class Security {
             throw new InvalidRequestException(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
         if (state == MatchingState.AUCTION){
             if (order.getSide() == Side.BUY) {
-                order.getBroker().decreaseCreditBy(order.getValue());
                 if (!order.getBroker().hasEnoughCredit(order.getValue())) {
                     return MatchResult.notEnoughCredit();
                 }
+                order.getBroker().decreaseCreditBy(order.getValue());
             }
             orderBook.enqueue(order);
             return MatchResult.auctioned();
