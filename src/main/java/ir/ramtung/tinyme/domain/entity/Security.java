@@ -206,22 +206,14 @@ public class Security {
     }
 
     public OpeningData findOpeningData(){
-         return findMinimumPrice(findClosestPriceToLastTransaction(orderBook.findPriceBasedOnMaxTransaction()));
+         return orderBook.findPriceBasedOnMaxTransaction().findClosestPriceToLastTransaction(lastTransactionPrice);
     }
-    private List<OpeningData> findClosestPriceToLastTransaction(List<OpeningData> possiblePrices){
-        var it = possiblePrices.listIterator();
-        int closestPrice = Integer.MAX_VALUE;
-        while (it.hasNext()){
-            OpeningData openingData = it.next();
-            if (abs(openingData.getOpeningPrice() - lastTransactionPrice) < closestPrice)
-                closestPrice = abs(openingData.getOpeningPrice() - lastTransactionPrice);
-            else
-                it.remove();
-        }
-        return possiblePrices;
-    }
-    private OpeningData findMinimumPrice(List<OpeningData> possiblePrices){
-        return possiblePrices.stream().min(Comparator.comparingInt(OpeningData::getOpeningPrice)).orElse(null);
+
+    private OpeningData findMinimumPrice(List<OpeningRangeData> possiblePrices){
+        int openingPrice = possiblePrices.stream().mapToInt(OpeningRangeData::getMinOpeningPrice).min().orElse(-1);
+        int tradableQuantity = possiblePrices.get(0).getTradableQuantity();
+        return new OpeningData(openingPrice, tradableQuantity);
+        // Bad implement
     }
 
     public void changeMatchingState(MatchingState targetState){

@@ -3,6 +3,8 @@ package ir.ramtung.tinyme.domain.entity;
 import lombok.Getter;
 
 import java.util.*;
+
+import static java.lang.Math.max;
 import static java.lang.Math.min;
 
 @Getter
@@ -87,8 +89,36 @@ public class OrderBook {
                 .sum();
     }
 
-    //int sellQuantity = sellQueue.stream().mapToInt(Order::getTotalQuantity).sum();
-    public List<OpeningData> findPriceBasedOnMaxTransaction() {
+    public OpeningRangeData findPriceBasedOnMaxTransaction() {
+        int minOpeningPrice = Integer.MAX_VALUE, maxOpeningPrice = Integer.MIN_VALUE;
+        int maxTradeQuantity = 0;
+        int sellQuantity = sellQueue.stream().mapToInt(Order::getTotalQuantity).sum(), buyQuantity = 0;
+        ListIterator<Order> buyQueueIt = buyQueue.listIterator();
+        ListIterator<Order> sellQueueIt = sellQueue.listIterator(sellQueue.size());
+        while (sellQueueIt.hasPrevious()) {
+            Order sellOrder = sellQueueIt.previous();
+            int maxPossiblePrice = -1;
+            while (buyQueueIt.hasNext()) {
+                Order buyOrder = buyQueueIt.next();
+                if (sellOrder.getPrice() <= buyOrder.getPrice()) {
+                    buyQuantity += buyOrder.getQuantity();
+                    maxPossiblePrice = buyOrder.getPrice();
+                }
+                else
+                    break;
+            }
+            if (min(sellQuantity, buyQuantity) > maxTradeQuantity) {
+                minOpeningPrice = sellOrder.getPrice();
+                maxOpeningPrice = maxPossiblePrice;
+                maxTradeQuantity = min(sellQuantity, buyQuantity);
+            }
+            else if (min(sellQuantity, buyQuantity) == maxTradeQuantity)
+                minOpeningPrice = sellOrder.getPrice();
+            sellQuantity -= sellOrder.getQuantity();
+        }
+        return new OpeningRangeData(minOpeningPrice, maxOpeningPrice, maxTradeQuantity);
+    }
+    public List<OpeningData> indPriceBasedOnMaxTransaction() {
         List<OpeningData> possiblePrices = new ArrayList<OpeningData>();
         int maxTradeQuantity = 0;
         int sellQuantity = 0, buyQuantity = 0;
