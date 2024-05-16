@@ -74,6 +74,7 @@ public class Security {
             throw new InvalidRequestException(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
         if (state == MatchingState.AUCTION){
             if (order.getSide() == Side.BUY) {
+                order.getBroker().decreaseCreditBy(order.getValue());
                 if (!order.getBroker().hasEnoughCredit(order.getValue())) {
                     return MatchResult.notEnoughCredit();
                 }
@@ -228,10 +229,12 @@ public class Security {
         LinkedList<MatchResult> results = new LinkedList<>();
         LinkedList<Order> buyOrders = orderBook.getBuyQueue();
         OpeningData openingData = findOpeningData();
-        while (!buyOrders.isEmpty()){
+        while (orderBook.hasOrderOfType(Side.BUY) && orderBook.hasOrderOfType(Side.SELL)){
             Order auctionedOrder = buyOrders.removeFirst();
-            if (auctionedOrder.price < openingData.getOpeningPrice())
-                continue;
+
+            if (auctionedOrder.price < openingData.getOpeningPrice()){
+                break;
+            }
             MatchResult matchResult = matcher.execute(auctionedOrder);
             results.add(matchResult);
         }

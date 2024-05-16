@@ -104,8 +104,10 @@ public class OrderBook {
                     buyQuantity += buyOrder.getQuantity();
                     maxPossiblePrice = buyOrder.getPrice();
                 }
-                else
+                else {
+                    buyQueueIt.previous();
                     break;
+                }
             }
             if (min(sellQuantity, buyQuantity) > maxTradeQuantity) {
                 minOpeningPrice = sellOrder.getPrice();
