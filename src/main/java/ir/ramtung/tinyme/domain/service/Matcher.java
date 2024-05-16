@@ -14,6 +14,7 @@ public class Matcher {
         MatchingState state = newOrder.getSecurity().getState();
         OpeningData openingData = newOrder.getSecurity().findOpeningData();
         LinkedList<Trade> trades = new LinkedList<>();
+        int originalQuantity = newOrder.getQuantity();
 
         while (orderBook.hasOrderOfType(newOrder.getSide().opposite()) && newOrder.getQuantity() > 0) {
             Order matchingOrder = orderBook.matchWithFirst(newOrder);
@@ -52,6 +53,8 @@ public class Matcher {
                 newOrder.makeQuantityZero();
             }
         }
+        if (newOrder.getSecurity().getState() == MatchingState.AUCTION && newOrder.getSide() == Side.BUY)
+            newOrder.getBroker().increaseCreditBy((long) (newOrder.getPrice() - openingData.getOpeningPrice()) * (originalQuantity - newOrder.getQuantity()));
         return MatchResult.executed(newOrder, trades);
     }
 
@@ -79,7 +82,6 @@ public class Matcher {
         if (result.outcome() == MatchingOutcome.NOT_ENOUGH_CREDIT)
             return result;
 
-
         if (result.remainder().getQuantity() > 0) {
             if (order.getSide() == Side.BUY) {
                 if(order.getSecurity().getState() == MatchingState.CONTINUOUS) {
@@ -90,8 +92,6 @@ public class Matcher {
 
                     order.getBroker().decreaseCreditBy(order.getValue());
                 }
-                else
-                    order.getBroker().increaseCreditBy(order.getValue() - openingData.getOpeningPrice());
             }
 
             if (order.isNew() && order.getMinimumExecutionQuantity() > (initialQuantity - result.remainder().getQuantity())){
