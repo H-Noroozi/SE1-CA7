@@ -222,6 +222,21 @@ public class Security {
         }
         state = targetState;
     }
+
+
+    public LinkedList<MatchResult> runAuctionedOrders(Matcher matcher){
+        LinkedList<MatchResult> results = new LinkedList<>();
+        LinkedList<Order> buyOrders = orderBook.getBuyQueue();
+        OpeningData openingData = findOpeningData();
+        while (!buyOrders.isEmpty()){
+            Order auctionedOrder = buyOrders.removeFirst();
+            if (auctionedOrder.price < openingData.getOpeningPrice())
+                continue;
+            MatchResult matchResult = matcher.execute(auctionedOrder);
+            results.add(matchResult);
+        }
+        return results;
+    }
 }
 
 
