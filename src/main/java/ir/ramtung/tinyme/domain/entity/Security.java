@@ -208,7 +208,7 @@ public class Security {
             StopLimitOrder executableOrder = (StopLimitOrder) executableOrders.removeFirst();
             MatchResult matchResult = matcher.execute(executableOrder);
             if (!matchResult.trades().isEmpty()) {
-                checkExecutableOrders(matchResult);
+                checkExecutableOrders(matchResult.trades().getLast().getPrice());
             }
             results.add(matchResult);
         }
