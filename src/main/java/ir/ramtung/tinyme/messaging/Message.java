@@ -21,4 +21,5 @@ public class Message {
     public static final String ORDER_STOP_PRICE_NEGATIVE = "Order stop price is negative";
     public static final String CANNOT_SPECIFY_MINIMUM_EXECUTION_QUANTITY_FOR_A_STOP_LIMIT_ORDER = "Cannot specify minimum execution quantity for a stop limit order";
     public static final String ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG = "The order cannot be both a stop and an iceberg";
+    public static final String CANNOT_REQUEST_STOP_LIMIT_ORDER_IN_AUCTION_STATE = "Cannot request stop limit order when security is in Auction state";
 }

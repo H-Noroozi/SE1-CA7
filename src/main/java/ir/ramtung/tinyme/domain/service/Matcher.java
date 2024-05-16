@@ -47,13 +47,19 @@ public class Matcher {
     }
 
     private void rollbackTrades(Order newOrder, LinkedList<Trade> trades) {
-        assert newOrder.getSide() == Side.BUY;
-        newOrder.getBroker().increaseCreditBy(trades.stream().mapToLong(Trade::getTradedValue).sum());
-        trades.forEach(trade -> trade.getSell().getBroker().decreaseCreditBy(trade.getTradedValue()));
+        if (newOrder.getSide() == Side.BUY) {
+            newOrder.getBroker().increaseCreditBy(trades.stream().mapToLong(Trade::getTradedValue).sum());
+            trades.forEach(trade -> trade.getSell().getBroker().decreaseCreditBy(trade.getTradedValue()));
+        }
+        else
+            newOrder.getBroker().decreaseCreditBy(trades.stream().mapToLong(Trade::getTradedValue).sum());
 
         ListIterator<Trade> it = trades.listIterator(trades.size());
         while (it.hasPrevious()) {
-            newOrder.getSecurity().getOrderBook().restoreSellOrder(it.previous().getSell());
+            if (newOrder.getSide() == Side.BUY)
+                newOrder.getSecurity().getOrderBook().restoreOrder(it.previous().getSell());
+            else
+                newOrder.getSecurity().getOrderBook().restoreOrder(it.previous().getBuy());
         }
     }
 
@@ -62,8 +68,7 @@ public class Matcher {
         MatchResult result = match(order);
         if (result.outcome() == MatchingOutcome.NOT_ENOUGH_CREDIT)
             return result;
-        if (result.outcome() == MatchingOutcome.NOT_ENOUGH_INITIAL_TRANSACTION)
-            return result;
+
 
         if (result.remainder().getQuantity() > 0) {
             if (order.getSide() == Side.BUY) {
@@ -75,9 +80,7 @@ public class Matcher {
                 order.getBroker().decreaseCreditBy(order.getValue());
             }
             if (order.isNew() && order.getMinimumExecutionQuantity() > (initialQuantity - result.remainder().getQuantity())){
-                if (order.getSide() == Side.BUY){
-                    rollbackTrades(order, result.trades());
-                }
+                rollbackTrades(order, result.trades());
                 return MatchResult.notEnoughInitialTransaction();
             }
 
