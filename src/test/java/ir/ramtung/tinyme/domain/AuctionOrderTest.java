@@ -5,8 +5,14 @@ import ir.ramtung.tinyme.domain.entity.*;
 import ir.ramtung.tinyme.domain.service.Matcher;
 import ir.ramtung.tinyme.domain.service.OrderHandler;
 import ir.ramtung.tinyme.messaging.EventPublisher;
+import ir.ramtung.tinyme.messaging.Message;
 import ir.ramtung.tinyme.messaging.TradeDTO;
+import ir.ramtung.tinyme.messaging.event.OpeningPriceEvent;
 import ir.ramtung.tinyme.messaging.event.OrderExecutedEvent;
+import ir.ramtung.tinyme.messaging.event.OrderRejectedEvent;
+import ir.ramtung.tinyme.messaging.event.SecurityStateChangedEvent;
+import ir.ramtung.tinyme.messaging.exception.InvalidRequestException;
+import ir.ramtung.tinyme.messaging.request.ChangeMatchingStateRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
 import ir.ramtung.tinyme.messaging.request.MatchingState;
 import ir.ramtung.tinyme.repository.BrokerRepository;
@@ -24,7 +30,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import static ir.ramtung.tinyme.domain.entity.Side.BUY;
-import static org.assertj.core.api.Assertions.assertThat;
+import static ir.ramtung.tinyme.domain.entity.Side.SELL;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.verify;
 
 @SpringBootTest
@@ -79,6 +86,13 @@ public class AuctionOrderTest {
     }
 
     @Test
+    void opening_price_is_calculated_correctly_with_set_of_orders() {
+        Order order = new Order(11, security, Side.SELL, 3, 15, broker, shareholder, 0);
+        orderBook.enqueue(order);
+        assertThat(security.findOpeningData().getOpeningPrice()).isEqualTo(15);
+    }
+
+    @Test
     void matcher_match_the_order_with_security_status_on_auctioned() {
         Order order = new Order(11, security, Side.SELL, 3, 15, broker, shareholder, 0);
         orderBook.enqueue(order);
@@ -90,14 +104,49 @@ public class AuctionOrderTest {
     }
 
     @Test
-    void buy_order_broker_credit_get_rolled_back_when_opening_price_is_less_than_order_price() {
-        Order order = new Order(11, security, BUY, 3, 20, broker, shareholder, 0);
-        orderBook.enqueue(order);
+    void buyer_credit_get_decreased_when_new_order_is_set() {
+        EnterOrderRq enterOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 50, 2, shareholder.getShareholderId(), 0, 0, 0);
+        assertThatNoException().isThrownBy(() -> security.newOrder(enterOrderRq, buyerBroker, shareholder, matcher));
+        assertThat(buyerBroker.getCredit()).isEqualTo(50);
+    }
 
+    @Test
+    void buy_order_broker_credit_get_rolled_back_when_opening_price_is_less_than_order_price() {
         orderHandler.handleEnterOrder(EnterOrderRq.createNewOrderRq(1, "ABC", 11, LocalDateTime.now(), BUY, 3, 20, 2, shareholder.getShareholderId(), 0, 0, 0));
-        Trade trade = new Trade(security, order.getPrice(), order.getQuantity(),
-                orders.get(2), order);
 
         assertThat(buyerBroker.getCredit()).isEqualTo(155);
+    }
+
+    @Test
+    void new_order_with_stop_limit_when_security_status_is_auctioned_fails() {
+        EnterOrderRq enterOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 50, 2, shareholder.getShareholderId(), 0, 0, 1);
+        assertThatExceptionOfType(InvalidRequestException.class).isThrownBy(() -> security.newOrder(enterOrderRq, buyerBroker, shareholder, matcher));
+    }
+
+    @Test
+    void new_order_with_minimum_execution_quantity_stop_limit_when_security_status_is_auctioned_fails() {
+        EnterOrderRq enterOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 50, 2, shareholder.getShareholderId(), 0, 1, 0);
+        assertThatExceptionOfType(InvalidRequestException.class).isThrownBy(() -> security.newOrder(enterOrderRq, buyerBroker, shareholder, matcher));
+    }
+
+    @Test
+    void new_order_without_enough_initial_credit_fails() {
+        orderHandler.handleEnterOrder(EnterOrderRq.createNewOrderRq(1, "ABC", 11, LocalDateTime.now(), BUY, 3, 550, 2, shareholder.getShareholderId(), 0, 0, 0));
+
+        verify(eventPublisher).publish(new OrderRejectedEvent(1, 11, List.of(Message.BUYER_HAS_NOT_ENOUGH_CREDIT)));
+    }
+
+    @Test
+    void event_publisher_publish_open_price_event() {
+        orderHandler.handleEnterOrder(EnterOrderRq.createNewOrderRq(1, "ABC", 11, LocalDateTime.now(), BUY, 3, 5, 2, shareholder.getShareholderId(), 0, 0, 0));
+
+        verify(eventPublisher).publish(new OpeningPriceEvent("ABC", 15, 3));
+    }
+
+    @Test
+    void event_publisher_publish_security_state_changed_event() {
+        orderHandler.handleChangeMatchingState(ChangeMatchingStateRq.createContinuousStateOrderRq("ABC"));
+
+        verify(eventPublisher).publish(new SecurityStateChangedEvent("ABC", MatchingState.CONTINUOUS));
     }
 }
