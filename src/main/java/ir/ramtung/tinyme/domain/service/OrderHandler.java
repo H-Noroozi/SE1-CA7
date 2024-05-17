@@ -135,7 +135,6 @@ public class OrderHandler {
         if (security.getState() == MatchingState.AUCTION){
             LinkedList<MatchResult> results = security.runAuctionedOrders(matcher);
             for (MatchResult result : results) {
-                Order executedOrder = result.remainder();
                 if (!result.trades().isEmpty()){
                     for (Trade trade : result.trades()) {
                         eventPublisher.publish(new TradeEvent(trade.getSecurity().getIsin(), trade.getPrice(), trade.getQuantity(), trade.getBuy().getOrderId(), trade.getSell().getOrderId()));
@@ -143,13 +142,14 @@ public class OrderHandler {
                 }
             }
             security.checkExecutableOrders(results.get(0).trades().getLast().getPrice());
+            LinkedList<MatchResult> activationResults;
             if (changeMatchingStateRq.getTargetState() == MatchingState.AUCTION){
-                LinkedList<MatchResult> matchResults = security.enqueueExecutableOrders();
+                activationResults = security.enqueueExecutableOrders();
             }
             else {
-                LinkedList<MatchResult> matchResults = security.runExecutableOrders(matcher);
+                activationResults = security.runExecutableOrders(matcher);
             }
-            for (MatchResult result : results) {
+            for (MatchResult result : activationResults) {
                 StopLimitOrder executedOrder = (StopLimitOrder) result.remainder();
                 eventPublisher.publish(new OrderActivatedEvent(executedOrder.getRequestId(), executedOrder.getOrderId()));
                 if (!result.trades().isEmpty()){
@@ -180,6 +180,9 @@ public class OrderHandler {
                     errors.add(Message.CANNOT_REQUEST_STOP_LIMIT_ORDER_IN_AUCTION_STATE);
                 else
                     errors.add(Message.CANNOT_UPDATE_STOP_LIMIT_ORDER_IN_AUCTION_STATE);
+            }
+            if (security.getState() == MatchingState.AUCTION && enterOrderRq.getMinimumExecutionQuantity() != 0){
+                errors.add(Message.CANNOT_REQUEST_MINIMUM_QUANTITY_EXECUTION_ORDER_IN_AUCTION_STATE);
             }
             if (enterOrderRq.getQuantity() % security.getLotSize() != 0)
                 errors.add(Message.QUANTITY_NOT_MULTIPLE_OF_LOT_SIZE);

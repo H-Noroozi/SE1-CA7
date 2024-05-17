@@ -34,6 +34,8 @@ public class Security {
     private final LinkedList<Order> executableOrders = new LinkedList<>();
     @Builder.Default
     private MatchingState state = MatchingState.CONTINUOUS;
+    @Builder.Default
+    private int openingPrice = 0;
 
 
     public MatchResult newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
@@ -227,7 +229,9 @@ public class Security {
     }
 
     public OpeningData findOpeningData(){
-         return orderBook.findPriceBasedOnMaxTransaction().findClosestPriceToLastTransaction(lastTransactionPrice);
+         OpeningData openingData = orderBook.findPriceBasedOnMaxTransaction().findClosestPriceToLastTransaction(lastTransactionPrice);
+         openingPrice = openingData.getOpeningPrice();
+         return openingData;
     }
 
     private OpeningData findMinimumPrice(List<OpeningRangeData> possiblePrices){
