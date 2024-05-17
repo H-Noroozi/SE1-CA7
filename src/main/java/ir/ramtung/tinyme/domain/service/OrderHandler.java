@@ -69,9 +69,11 @@ public class OrderHandler {
                 if ((enterOrderRq.getStopPrice() != 0) && (matchResult.remainder() != null)) {
                     eventPublisher.publish(new OrderActivatedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId()));
                 }
+                if (security.getState() == MatchingState.AUCTION)
+                    publishOpeningData(security);
             }
             if (matchResult.outcome() == MatchingOutcome.AUCTIONED) {
-
+                    publishOpeningData(security);
                     LinkedList<MatchResult> results = security.runAuctionedOrders(matcher);
                     for (MatchResult result : results) {
                         Order executedOrder = result.remainder();
@@ -111,9 +113,16 @@ public class OrderHandler {
             Security security = securityRepository.findSecurityByIsin(deleteOrderRq.getSecurityIsin());
             security.deleteOrder(deleteOrderRq);
             eventPublisher.publish(new OrderDeletedEvent(deleteOrderRq.getRequestId(), deleteOrderRq.getOrderId()));
+            if (security.getState() == MatchingState.AUCTION)
+                publishOpeningData(security);
         } catch (InvalidRequestException ex) {
             eventPublisher.publish(new OrderRejectedEvent(deleteOrderRq.getRequestId(), deleteOrderRq.getOrderId(), ex.getReasons()));
         }
+    }
+
+    private void publishOpeningData(Security security){
+        OpeningData openingData = security.findOpeningData();
+        eventPublisher.publish(new OpeningPriceEvent(security.getIsin(), openingData.getOpeningPrice(), openingData.getTradableQuantity()));
     }
 
     public void handleChangeMatchingState(ChangeMatchingStateRq changeMatchingStateRq) {
@@ -164,6 +173,12 @@ public class OrderHandler {
         if (security == null)
             errors.add(Message.UNKNOWN_SECURITY_ISIN);
         else {
+            if (security.getState() == MatchingState.AUCTION && enterOrderRq.getStopPrice() != 0){
+                if (enterOrderRq.getRequestType() == OrderEntryType.NEW_ORDER)
+                    errors.add(Message.CANNOT_REQUEST_STOP_LIMIT_ORDER_IN_AUCTION_STATE);
+                else
+                    errors.add(Message.CANNOT_UPDATE_STOP_LIMIT_ORDER_IN_AUCTION_STATE);
+            }
             if (enterOrderRq.getQuantity() % security.getLotSize() != 0)
                 errors.add(Message.QUANTITY_NOT_MULTIPLE_OF_LOT_SIZE);
             if (enterOrderRq.getPrice() % security.getTickSize() != 0)
