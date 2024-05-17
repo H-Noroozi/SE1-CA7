@@ -70,8 +70,6 @@ public class Security {
         else
             throw new InvalidRequestException(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
         if (state == MatchingState.AUCTION){
-            if (order.minimumExecutionQuantity != 0)
-                throw new InvalidRequestException(Message.CANNOT_REQUEST_MINIMUM_QUANTITY_EXECUTION_ORDER_IN_AUCTION_STATE);
             if (order.getSide() == Side.BUY) {
                 if (!order.getBroker().hasEnoughCredit(order.getValue())) {
                     return MatchResult.notEnoughCredit();
