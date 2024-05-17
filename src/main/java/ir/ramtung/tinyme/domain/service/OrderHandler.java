@@ -78,7 +78,9 @@ public class OrderHandler {
                     for (MatchResult result : results) {
                         Order executedOrder = result.remainder();
                         if (!result.trades().isEmpty()){
-                            eventPublisher.publish(new OrderExecutedEvent(69, executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
+                            for (Trade trade : result.trades()) {
+                                eventPublisher.publish(new TradeEvent(trade.getSecurity().getIsin(), trade.getPrice(), trade.getQuantity(), trade.getBuy().getOrderId(), trade.getSell().getOrderId()));
+                            }
                         }
                     }
                     if (!results.isEmpty()){
@@ -129,14 +131,15 @@ public class OrderHandler {
         Security security = securityRepository.findSecurityByIsin(changeMatchingStateRq.getSecurityIsin());
         if (security == null){
             return;
-            // It must change.
         }
         if (security.getState() == MatchingState.AUCTION){
             LinkedList<MatchResult> results = security.runAuctionedOrders(matcher);
             for (MatchResult result : results) {
                 Order executedOrder = result.remainder();
                 if (!result.trades().isEmpty()){
-                    eventPublisher.publish(new OrderExecutedEvent(69, executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
+                    for (Trade trade : result.trades()) {
+                        eventPublisher.publish(new TradeEvent(trade.getSecurity().getIsin(), trade.getPrice(), trade.getQuantity(), trade.getBuy().getOrderId(), trade.getSell().getOrderId()));
+                    }
                 }
             }
             security.checkExecutableOrders(results.get(0).trades().getLast().getPrice());
@@ -156,7 +159,6 @@ public class OrderHandler {
         }
         security.changeMatchingState(changeMatchingStateRq.getTargetState());
         eventPublisher.publish(new SecurityStateChangedEvent(changeMatchingStateRq.getSecurityIsin(), changeMatchingStateRq.getTargetState()));
-
     }
 
     private void validateEnterOrderRq(EnterOrderRq enterOrderRq) throws InvalidRequestException {

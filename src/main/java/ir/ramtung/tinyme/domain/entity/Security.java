@@ -238,21 +238,19 @@ public class Security {
     }
 
     public void changeMatchingState(MatchingState targetState){
-        if (state == MatchingState.AUCTION && targetState == MatchingState.AUCTION){
-            // Do opening process
-        }
         state = targetState;
     }
 
 
     public LinkedList<MatchResult> runAuctionedOrders(Matcher matcher){
         LinkedList<MatchResult> results = new LinkedList<>();
-        LinkedList<Order> buyOrders = orderBook.getBuyQueue();
+        LinkedList<Order> buyOrders = orderBook.getQueue(Side.BUY);
         OpeningData openingData = findOpeningData();
         while (orderBook.hasOrderOfType(Side.BUY) && orderBook.hasOrderOfType(Side.SELL)){
             Order auctionedOrder = buyOrders.removeFirst();
 
             if (auctionedOrder.price < openingData.getOpeningPrice()){
+                buyOrders.addFirst(auctionedOrder);
                 break;
             }
             MatchResult matchResult = matcher.execute(auctionedOrder);

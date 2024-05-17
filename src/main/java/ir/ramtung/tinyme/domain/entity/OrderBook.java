@@ -82,6 +82,8 @@ public class OrderBook {
         getQueue(side).removeFirst();
     }
 
+    public Order getFirst(Side side) { return getQueue(side).getFirst(); }
+
     public int totalSellQuantityByShareholder(Shareholder shareholder) {
         return sellQueue.stream()
                 .filter(order -> order.getShareholder().equals(shareholder))
@@ -119,6 +121,30 @@ public class OrderBook {
             sellQuantity -= sellOrder.getQuantity();
         }
         return new OpeningRangeData(minOpeningPrice, maxOpeningPrice, maxTradeQuantity);
+    }
+    public OrderBook getExecutableOrdersWithPrise(int openingPrice){
+        OrderBook orderBook = new OrderBook();
+        ListIterator<Order> buyQueueIt = buyQueue.listIterator();
+        ListIterator<Order> sellQueueIt = sellQueue.listIterator();
+        while (buyQueueIt.hasNext()) {
+            Order buyOrder = buyQueueIt.next();
+            if (buyOrder.getPrice() < openingPrice)
+                break;
+            else {
+                orderBook.buyQueue.add(buyOrder);
+                buyQueue.remove();
+            }
+        }
+        while (sellQueueIt.hasNext()) {
+            Order sellOrder = sellQueueIt.next();
+            if (sellOrder.getPrice() > openingPrice)
+                break;
+            else{
+                orderBook.sellQueue.add(sellOrder);
+                sellQueue.remove();
+            }
+        }
+        return orderBook;
     }
 
 
