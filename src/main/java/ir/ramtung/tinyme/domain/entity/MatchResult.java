@@ -25,6 +25,12 @@ public final class MatchResult {
     public static MatchResult queuedAsInactiveOrder(){
         return new MatchResult(MatchingOutcome.QUEUED_AS_INACTIVE_ORDER, null, new LinkedList<>());
     }
+    public static MatchResult auctioned(){
+        return new MatchResult(MatchingOutcome.AUCTIONED, null, new LinkedList<>());
+    }
+    public static MatchResult activated(Order remainder){
+        return new MatchResult(MatchingOutcome.ACTIVATED, remainder, new LinkedList<>());
+    }
 
     private MatchResult(MatchingOutcome outcome, Order remainder, LinkedList<Trade> trades) {
         this.outcome = outcome;

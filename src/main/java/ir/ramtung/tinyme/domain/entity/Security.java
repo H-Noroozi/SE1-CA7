@@ -1,24 +1,20 @@
 package ir.ramtung.tinyme.domain.entity;
 
-import ir.ramtung.tinyme.messaging.TradeDTO;
-import ir.ramtung.tinyme.messaging.event.OrderAcceptedEvent;
-import ir.ramtung.tinyme.messaging.event.OrderActivatedEvent;
-import ir.ramtung.tinyme.messaging.event.OrderExecutedEvent;
 import ir.ramtung.tinyme.messaging.exception.InvalidRequestException;
 import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
 import ir.ramtung.tinyme.domain.service.Matcher;
 import ir.ramtung.tinyme.messaging.Message;
+import ir.ramtung.tinyme.messaging.request.MatchingState;
 import lombok.Builder;
 import lombok.Getter;
 
-import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.stream.Collectors;
 
-import ir.ramtung.tinyme.messaging.EventPublisher;
-import lombok.Setter;
+import static java.lang.Math.abs;
 
 @Getter
 @Builder
@@ -36,6 +32,10 @@ public class Security {
     private int lastTransactionPrice = 0;
     @Builder.Default
     private final LinkedList<Order> executableOrders = new LinkedList<>();
+    @Builder.Default
+    private MatchingState state = MatchingState.CONTINUOUS;
+    @Builder.Default
+    private int openingPrice = 0;
 
 
     public MatchResult newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
@@ -71,16 +71,29 @@ public class Security {
         }
         else
             throw new InvalidRequestException(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
+        if (state == MatchingState.AUCTION){
+            if (order.getSide() == Side.BUY) {
+                if (!order.getBroker().hasEnoughCredit(order.getValue())) {
+                    return MatchResult.notEnoughCredit();
+                }
+                order.getBroker().decreaseCreditBy(order.getValue());
+            }
+            orderBook.enqueue(order);
+            return MatchResult.auctioned();
+        }
         MatchResult matchResult = matcher.execute(order);
         return matchResult;
     }
 
     public void deleteOrder(DeleteOrderRq deleteOrderRq) throws InvalidRequestException {
         Order order = orderBook.findByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
-        if (order == null)
+        if (order == null) {
             order = inactiveOrderBook.findByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
-        if (order == null)
-            throw new InvalidRequestException(Message.ORDER_ID_NOT_FOUND);
+            if (order == null)
+                throw new InvalidRequestException(Message.ORDER_ID_NOT_FOUND);
+            else if (state == MatchingState.AUCTION)
+                throw new InvalidRequestException(Message.CANNOT_DELETE_STOP_LIMIT_ORDER_IN_AUCTION_STATE);
+        }
         if (order instanceof StopLimitOrder stopLimitOrder) {
             inactiveOrderBook.removeByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
             return;
@@ -122,8 +135,7 @@ public class Security {
         if (order instanceof StopLimitOrder stopLimitOrder) {
             if (stopLimitOrder.mustBeActive(lastTransactionPrice)){
                 inactiveOrderBook.removeByOrderId(stopLimitOrder.getSide(), stopLimitOrder.getOrderId());
-                MatchResult matchResult = matcher.execute((Order) stopLimitOrder);
-                return matchResult;
+                return matcher.execute((Order) stopLimitOrder);
             }
             else {
                 if (stopLimitOrder.getStopPrice() != ((StopLimitOrder) originalOrder).getStopPrice()){
@@ -148,23 +160,33 @@ public class Security {
             order.markAsNew();
 
         orderBook.removeByOrderId(updateOrderRq.getSide(), updateOrderRq.getOrderId());
-        MatchResult matchResult = matcher.execute(order);
-        if (matchResult.outcome() != MatchingOutcome.EXECUTED) {
-            orderBook.enqueue(originalOrder);
-            if (updateOrderRq.getSide() == Side.BUY) {
-                originalOrder.getBroker().decreaseCreditBy(originalOrder.getValue());
-            }
-        }
-        else
-            if(!matchResult.trades().isEmpty())
+        if (state == MatchingState.CONTINUOUS) {
+            MatchResult matchResult = matcher.execute(order);
+            if (matchResult.outcome() != MatchingOutcome.EXECUTED) {
+                orderBook.enqueue(originalOrder);
+                if (updateOrderRq.getSide() == Side.BUY) {
+                    originalOrder.getBroker().decreaseCreditBy(originalOrder.getValue());
+                }
+            } else if (!matchResult.trades().isEmpty())
                 lastTransactionPrice = matchResult.trades().getLast().getPrice();
 
-        return matchResult;
+            return matchResult;
+        }
+        else{
+            if (order.getSide() == Side.BUY) {
+                if (!order.getBroker().hasEnoughCredit(order.getValue())) {
+                    return MatchResult.notEnoughCredit();
+                }
+                order.getBroker().decreaseCreditBy(order.getValue());
+            }
+            orderBook.enqueue(order);
+            return MatchResult.executed(null, List.of());
+        }
     }
 
-    public void checkExecutableOrders(MatchResult matchResult) {
+    public void checkExecutableOrders(int tradePrice) {
         int previousTransactionPrice = lastTransactionPrice;
-        lastTransactionPrice = matchResult.trades().getLast().getPrice();
+        lastTransactionPrice = tradePrice;
         if (lastTransactionPrice == previousTransactionPrice) {
             return;
         }
@@ -183,14 +205,59 @@ public class Security {
         }
     }
 
+    public LinkedList<MatchResult> enqueueExecutableOrders(){
+        LinkedList<MatchResult> results = new LinkedList<>();
+        while (!executableOrders.isEmpty()){
+            StopLimitOrder executableOrder = (StopLimitOrder) executableOrders.removeFirst();
+            orderBook.enqueue(executableOrder);
+            results.add(MatchResult.activated(executableOrder));
+        }
+        return results;
+    }
+
     public LinkedList<MatchResult> runExecutableOrders(Matcher matcher){
         LinkedList<MatchResult> results = new LinkedList<>();
         while (!executableOrders.isEmpty()){
             StopLimitOrder executableOrder = (StopLimitOrder) executableOrders.removeFirst();
             MatchResult matchResult = matcher.execute(executableOrder);
             if (!matchResult.trades().isEmpty()) {
-                checkExecutableOrders(matchResult);
+                checkExecutableOrders(matchResult.trades().getLast().getPrice());
             }
+            results.add(matchResult);
+        }
+        return results;
+    }
+
+    public OpeningData findOpeningData(){
+         OpeningData openingData = orderBook.findPriceBasedOnMaxTransaction().findClosestPriceToLastTransaction(lastTransactionPrice);
+         openingPrice = openingData.getOpeningPrice();
+         return openingData;
+    }
+
+    private OpeningData findMinimumPrice(List<OpeningRangeData> possiblePrices){
+        int openingPrice = possiblePrices.stream().mapToInt(OpeningRangeData::getMinOpeningPrice).min().orElse(-1);
+        int tradableQuantity = possiblePrices.get(0).getTradableQuantity();
+        return new OpeningData(openingPrice, tradableQuantity);
+        // Bad implement
+    }
+
+    public void changeMatchingState(MatchingState targetState){
+        state = targetState;
+    }
+
+
+    public LinkedList<MatchResult> runAuctionedOrders(Matcher matcher){
+        LinkedList<MatchResult> results = new LinkedList<>();
+        LinkedList<Order> buyOrders = orderBook.getQueue(Side.BUY);
+        OpeningData openingData = findOpeningData();
+        while (orderBook.hasOrderOfType(Side.BUY) && orderBook.hasOrderOfType(Side.SELL)){
+            Order auctionedOrder = buyOrders.removeFirst();
+
+            if (auctionedOrder.price < openingData.getOpeningPrice()){
+                buyOrders.addFirst(auctionedOrder);
+                break;
+            }
+            MatchResult matchResult = matcher.execute(auctionedOrder);
             results.add(matchResult);
         }
         return results;

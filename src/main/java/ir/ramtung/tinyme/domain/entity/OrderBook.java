@@ -2,9 +2,10 @@ package ir.ramtung.tinyme.domain.entity;
 
 import lombok.Getter;
 
-import java.util.LinkedList;
-import java.util.List;
-import java.util.ListIterator;
+import java.util.*;
+
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 @Getter
 public class OrderBook {
@@ -68,9 +69,9 @@ public class OrderBook {
         queue.addFirst(order);
     }
 
-    public void restoreSellOrder(Order sellOrder) {
-        removeByOrderId(Side.SELL, sellOrder.getOrderId());
-        putBack(sellOrder);
+    public void restoreOrder(Order order) {
+        removeByOrderId(order.getSide(), order.getOrderId());
+        putBack(order);
     }
 
     public boolean hasOrderOfType(Side side) {
@@ -81,10 +82,70 @@ public class OrderBook {
         getQueue(side).removeFirst();
     }
 
+    public Order getFirst(Side side) { return getQueue(side).getFirst(); }
+
     public int totalSellQuantityByShareholder(Shareholder shareholder) {
         return sellQueue.stream()
                 .filter(order -> order.getShareholder().equals(shareholder))
                 .mapToInt(Order::getTotalQuantity)
                 .sum();
     }
+
+    public OpeningRangeData findPriceBasedOnMaxTransaction() {
+        int minOpeningPrice = Integer.MAX_VALUE, maxOpeningPrice = Integer.MIN_VALUE;
+        int maxTradeQuantity = 0;
+        int sellQuantity = sellQueue.stream().mapToInt(Order::getTotalQuantity).sum(), buyQuantity = 0;
+        ListIterator<Order> buyQueueIt = buyQueue.listIterator();
+        ListIterator<Order> sellQueueIt = sellQueue.listIterator(sellQueue.size());
+        while (sellQueueIt.hasPrevious()) {
+            Order sellOrder = sellQueueIt.previous();
+            int maxPossiblePrice = -1;
+            while (buyQueueIt.hasNext()) {
+                Order buyOrder = buyQueueIt.next();
+                if (sellOrder.getPrice() <= buyOrder.getPrice()) {
+                    buyQuantity += buyOrder.getQuantity();
+                    maxPossiblePrice = buyOrder.getPrice();
+                }
+                else {
+                    buyQueueIt.previous();
+                    break;
+                }
+            }
+            if (min(sellQuantity, buyQuantity) > maxTradeQuantity) {
+                minOpeningPrice = sellOrder.getPrice();
+                maxOpeningPrice = maxPossiblePrice;
+                maxTradeQuantity = min(sellQuantity, buyQuantity);
+            }
+            else if (min(sellQuantity, buyQuantity) == maxTradeQuantity)
+                minOpeningPrice = sellOrder.getPrice();
+            sellQuantity -= sellOrder.getQuantity();
+        }
+        return new OpeningRangeData(minOpeningPrice, maxOpeningPrice, maxTradeQuantity);
+    }
+    public OrderBook getExecutableOrdersWithPrise(int openingPrice){
+        OrderBook orderBook = new OrderBook();
+        ListIterator<Order> buyQueueIt = buyQueue.listIterator();
+        ListIterator<Order> sellQueueIt = sellQueue.listIterator();
+        while (buyQueueIt.hasNext()) {
+            Order buyOrder = buyQueueIt.next();
+            if (buyOrder.getPrice() < openingPrice)
+                break;
+            else {
+                orderBook.buyQueue.add(buyOrder);
+                buyQueue.remove();
+            }
+        }
+        while (sellQueueIt.hasNext()) {
+            Order sellOrder = sellQueueIt.next();
+            if (sellOrder.getPrice() > openingPrice)
+                break;
+            else{
+                orderBook.sellQueue.add(sellOrder);
+                sellQueue.remove();
+            }
+        }
+        return orderBook;
+    }
+
+
 }
