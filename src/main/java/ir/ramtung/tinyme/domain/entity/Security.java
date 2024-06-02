@@ -257,7 +257,7 @@ public class Security {
                 buyOrders.addFirst(auctionedOrder);
                 break;
             }
-            MatchResult matchResult = matcher.execute(auctionedOrder);
+            MatchResult matchResult = matcher.executeAuction(auctionedOrder);
             results.add(matchResult);
         }
         return results;
