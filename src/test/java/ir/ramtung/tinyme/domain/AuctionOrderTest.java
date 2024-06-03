@@ -175,6 +175,7 @@ public class AuctionOrderTest {
 
     @Test
     void security_state_from_auctioned_to_continuous_change_request_makes_orders_match() {
+        security.findOpeningData();
         orderHandler.handleChangeMatchingState(ChangeMatchingStateRq.createContinuousStateOrderRq("ABC"));
 
         verify(eventPublisher).publish(new TradeEvent("ABC", 15, 3,3,7));
@@ -182,6 +183,7 @@ public class AuctionOrderTest {
 
     @Test
     void stop_limit_order_get_activated_when_open_price_order_get_traded_when_security_state_change_to_auction() {
+        security.findOpeningData();
         security.changeMatchingState(MatchingState.CONTINUOUS);
 
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 7);

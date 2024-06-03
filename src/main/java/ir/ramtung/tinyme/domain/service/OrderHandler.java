@@ -204,17 +204,54 @@ public class OrderHandler {
         if (enterOrderRq.getStopPrice() != 0 && enterOrderRq.getMinimumExecutionQuantity() != 0) {
             errors.add(Message.CANNOT_SPECIFY_MINIMUM_EXECUTION_QUANTITY_FOR_A_STOP_LIMIT_ORDER);
         }
+        if (enterOrderRq.getStopPrice() != 0 && enterOrderRq.getPeakSize() != 0)
+            errors.add(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
         if (!errors.isEmpty())
             throw new InvalidRequestException(errors);
+        else {
+            if (enterOrderRq.getRequestType() == OrderEntryType.NEW_ORDER)
+                return;
+            else
+                updateOrderValidation(enterOrderRq, security);
+        }
     }
 
     private void validateDeleteOrderRq(DeleteOrderRq deleteOrderRq) throws InvalidRequestException {
         List<String> errors = new LinkedList<>();
         if (deleteOrderRq.getOrderId() <= 0)
             errors.add(Message.INVALID_ORDER_ID);
-        if (securityRepository.findSecurityByIsin(deleteOrderRq.getSecurityIsin()) == null)
+        Security security = securityRepository.findSecurityByIsin(deleteOrderRq.getSecurityIsin());
+        if (security == null)
             errors.add(Message.UNKNOWN_SECURITY_ISIN);
         if (!errors.isEmpty())
             throw new InvalidRequestException(errors);
+        else
+            deleteOrderValidation(deleteOrderRq, security);
+    }
+
+    private void updateOrderValidation(EnterOrderRq updateOrderRq, Security security) throws InvalidRequestException {
+        Order order;
+        if (updateOrderRq.getStopPrice() != 0)
+            order = security.getInactiveOrderBook().findByOrderId(updateOrderRq.getSide(), updateOrderRq.getOrderId());
+        else
+            order = security.getOrderBook().findByOrderId(updateOrderRq.getSide(), updateOrderRq.getOrderId());
+        if (order == null)
+            throw new InvalidRequestException(Message.ORDER_ID_NOT_FOUND);
+        if ((order instanceof IcebergOrder) && updateOrderRq.getPeakSize() == 0)
+            throw new InvalidRequestException(Message.INVALID_PEAK_SIZE);
+        if (!(order instanceof IcebergOrder) && updateOrderRq.getPeakSize() != 0)
+            throw new InvalidRequestException(Message.CANNOT_SPECIFY_PEAK_SIZE_FOR_A_NON_ICEBERG_ORDER);
+        if (order.getMinimumExecutionQuantity() != updateOrderRq.getMinimumExecutionQuantity())
+            throw new InvalidRequestException(Message.CANNOT_CHANGE_MINIMUM_EXECUTION_QUANTITY);
+    }
+    private void deleteOrderValidation(DeleteOrderRq deleteOrderRq, Security security) throws InvalidRequestException {
+        Order order = security.getOrderBook().findByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
+        if (order == null) {
+            order = security.getInactiveOrderBook().findByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
+            if (order == null)
+                throw new InvalidRequestException(Message.ORDER_ID_NOT_FOUND);
+            else if (security.getState() == MatchingState.AUCTION)
+                throw new InvalidRequestException(Message.CANNOT_DELETE_STOP_LIMIT_ORDER_IN_AUCTION_STATE);
+        }
     }
 }

@@ -70,7 +70,7 @@ public class Security {
             }
         }
         else
-            throw new InvalidRequestException(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
+            throw new InvalidRequestException("Panic");
         if (state == MatchingState.AUCTION){
             if (order.getSide() == Side.BUY) {
                 if (!order.getBroker().hasEnoughCredit(order.getValue())) {
@@ -89,10 +89,6 @@ public class Security {
         Order order = orderBook.findByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
         if (order == null) {
             order = inactiveOrderBook.findByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
-            if (order == null)
-                throw new InvalidRequestException(Message.ORDER_ID_NOT_FOUND);
-            else if (state == MatchingState.AUCTION)
-                throw new InvalidRequestException(Message.CANNOT_DELETE_STOP_LIMIT_ORDER_IN_AUCTION_STATE);
         }
         if (order instanceof StopLimitOrder stopLimitOrder) {
             inactiveOrderBook.removeByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
@@ -110,14 +106,7 @@ public class Security {
         }
         else
             order = orderBook.findByOrderId(updateOrderRq.getSide(), updateOrderRq.getOrderId());
-        if (order == null)
-            throw new InvalidRequestException(Message.ORDER_ID_NOT_FOUND);
-        if ((order instanceof IcebergOrder) && updateOrderRq.getPeakSize() == 0)
-            throw new InvalidRequestException(Message.INVALID_PEAK_SIZE);
-        if (!(order instanceof IcebergOrder) && updateOrderRq.getPeakSize() != 0)
-            throw new InvalidRequestException(Message.CANNOT_SPECIFY_PEAK_SIZE_FOR_A_NON_ICEBERG_ORDER);
-        if (order.getMinimumExecutionQuantity() != updateOrderRq.getMinimumExecutionQuantity())
-            throw new InvalidRequestException(Message.CANNOT_CHANGE_MINIMUM_EXECUTION_QUANTITY);
+
         order.markAsUpdated();
 
         if (updateOrderRq.getSide() == Side.SELL &&
@@ -249,15 +238,14 @@ public class Security {
     public LinkedList<MatchResult> runAuctionedOrders(Matcher matcher){
         LinkedList<MatchResult> results = new LinkedList<>();
         LinkedList<Order> buyOrders = orderBook.getQueue(Side.BUY);
-        OpeningData openingData = findOpeningData();
         while (orderBook.hasOrderOfType(Side.BUY) && orderBook.hasOrderOfType(Side.SELL)){
             Order auctionedOrder = buyOrders.removeFirst();
 
-            if (auctionedOrder.price < openingData.getOpeningPrice()){
+            MatchResult matchResult = matcher.executeAuction(auctionedOrder);
+            if (matchResult.trades().isEmpty()){
                 buyOrders.addFirst(auctionedOrder);
                 break;
             }
-            MatchResult matchResult = matcher.executeAuction(auctionedOrder);
             results.add(matchResult);
         }
         return results;

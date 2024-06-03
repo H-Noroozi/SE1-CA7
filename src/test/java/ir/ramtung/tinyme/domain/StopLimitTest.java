@@ -6,10 +6,12 @@ import ir.ramtung.tinyme.domain.entity.*;
 import ir.ramtung.tinyme.domain.service.Matcher;
 import ir.ramtung.tinyme.domain.service.OrderHandler;
 import ir.ramtung.tinyme.messaging.EventPublisher;
+import ir.ramtung.tinyme.messaging.Message;
 import ir.ramtung.tinyme.messaging.TradeDTO;
 import ir.ramtung.tinyme.messaging.event.OrderAcceptedEvent;
 import ir.ramtung.tinyme.messaging.event.OrderActivatedEvent;
 import ir.ramtung.tinyme.messaging.event.OrderExecutedEvent;
+import ir.ramtung.tinyme.messaging.event.OrderRejectedEvent;
 import ir.ramtung.tinyme.messaging.exception.InvalidRequestException;
 import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
@@ -25,6 +27,7 @@ import org.springframework.test.annotation.DirtiesContext;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 
 import static ir.ramtung.tinyme.domain.entity.Side.BUY;
@@ -292,7 +295,10 @@ public class StopLimitTest {
     @Test
     void new_order_with_both_peak_size_and_stop_limit_fails() {
         EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 2, 1, shareholder.getShareholderId(), 1, 0, 5);
-        assertThatExceptionOfType(InvalidRequestException.class).isThrownBy(() -> security.updateOrder(newOrderRq, matcher));
+        orderHandler.handleEnterOrder(newOrderRq);
+        LinkedList<String> errors = new LinkedList<>();
+        errors.add(Message.ORDER_CANNOT_BE_BOTH_A_STOP_LIMIT_AND_AN_ICEBERG);
+        verify(eventPublisher).publish(new OrderRejectedEvent(newOrderRq.getRequestId(), newOrderRq.getOrderId(), errors));
     }
 
     @Test
