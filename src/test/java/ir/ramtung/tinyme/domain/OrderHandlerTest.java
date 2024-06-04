@@ -8,6 +8,7 @@ import ir.ramtung.tinyme.messaging.EventPublisher;
 import ir.ramtung.tinyme.messaging.Message;
 import ir.ramtung.tinyme.messaging.TradeDTO;
 import ir.ramtung.tinyme.messaging.event.*;
+import ir.ramtung.tinyme.messaging.exception.InvalidRequestException;
 import ir.ramtung.tinyme.messaging.request.DeleteOrderRq;
 import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
 import ir.ramtung.tinyme.repository.BrokerRepository;
@@ -25,7 +26,9 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static ir.ramtung.tinyme.domain.entity.Side.BUY;
+import static ir.ramtung.tinyme.domain.entity.Side.SELL;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @SpringBootTest
@@ -560,4 +563,44 @@ public class OrderHandlerTest {
         assertThat(shareholder.hasEnoughPositionsOn(security, 500)).isTrue();
     }
 
+    @Test
+    void updating_non_existing_order_fails() {
+        EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(1, security.getIsin(), 644, LocalDateTime.now(), BUY, 350, 15700, broker3.getBrokerId(), 0, 0, 0, 0);
+        orderHandler.handleEnterOrder(updateOrderRq);
+        verify(eventPublisher).publish(new OrderRejectedEvent(1, 644, List.of(Message.ORDER_ID_NOT_FOUND)));
+    }
+
+    @Test
+    void deleting_non_existing_order_fails() {
+        DeleteOrderRq deleteOrderRq = new DeleteOrderRq(1, security.getIsin(), Side.SELL, 101);
+        orderHandler.handleDeleteOrder(deleteOrderRq);
+        verify(eventPublisher).publish(new OrderRejectedEvent(1, 101, List.of(Message.ORDER_ID_NOT_FOUND)));
+    }
+
+    @Test
+    void new_stop_limit_order_without_enough_credit_fails() {
+        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 2000000, broker3.getBrokerId(), shareholder.getShareholderId(), 0, 0, 5);
+        orderHandler.handleEnterOrder(newOrderRq);
+        verify(eventPublisher).publish(new OrderRejectedEvent(1, 1, List.of(Message.BUYER_HAS_NOT_ENOUGH_CREDIT)));
+    }
+
+    @Test
+    void new_stop_limit_order_without_enough_position_fails() {
+        shareholder.decPosition(security, 99_999);
+        broker3.increaseCreditBy(100_000_000);
+
+        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), SELL, 3000000, 2, broker3.getBrokerId(), shareholder.getShareholderId(), 0, 0, 5);
+        orderHandler.handleEnterOrder(newOrderRq);
+        verify(eventPublisher).publish(new OrderRejectedEvent(1, 1, List.of(Message.SELLER_HAS_NOT_ENOUGH_POSITIONS)));
+    }
+
+    @Test
+    void update_order_invalid_if_order_is_activated_and_we_give_stop_limit() {
+        EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 3);
+        orderHandler.handleEnterOrder(stopLimitOrderRq);
+        EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(3, security.getIsin(), 1, LocalDateTime.now(), BUY, 2, 7, 1, shareholder.getShareholderId(), 0, 0, 2);
+
+        orderHandler.handleEnterOrder(updateOrderRq);
+        verify(eventPublisher).publish(new OrderRejectedEvent(1, 1, List.of(Message.ORDER_ID_NOT_FOUND)));
+    }
 }

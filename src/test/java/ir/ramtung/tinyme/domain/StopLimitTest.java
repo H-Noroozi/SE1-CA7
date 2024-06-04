@@ -302,19 +302,6 @@ public class StopLimitTest {
     }
 
     @Test
-    void new_order_without_enough_credit_fails() {
-        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 2000000, 1, shareholder.getShareholderId(), 1, 0, 5);
-        assertThatExceptionOfType(InvalidRequestException.class).isThrownBy(() -> security.updateOrder(newOrderRq, matcher));
-    }
-
-    @Test
-    void new_order_without_enough_position_fails() {
-        shareholder.decPosition(security, 999_999);
-        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 2000000, 1, shareholder.getShareholderId(), 1, 0, 5);
-        assertThatExceptionOfType(InvalidRequestException.class).isThrownBy(() -> security.updateOrder(newOrderRq, matcher));
-    }
-
-    @Test
     void event_publisher_publish_activated_order_when_order_get_activated_when_its_published() {
         EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 3);
 
@@ -357,16 +344,6 @@ public class StopLimitTest {
                 buyStopLimitOrder, sellOrder);
 
         verify(eventPublisher).publish(new OrderExecutedEvent(1, 55, List.of(new TradeDTO(trade))));
-    }
-
-    @Test
-    void update_order_invalid_if_order_is_activated_and_we_give_stop_limit() {
-        EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, 1, shareholder.getShareholderId(), 0, 0, 3);
-        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
-
-        EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(3, security.getIsin(), 1, LocalDateTime.now(), BUY, 2, 7, 1, shareholder.getShareholderId(), 0, 0, 2);
-
-        assertThatExceptionOfType(InvalidRequestException.class).isThrownBy(() -> security.updateOrder(updateOrderRq, matcher));
     }
 
     @Test
