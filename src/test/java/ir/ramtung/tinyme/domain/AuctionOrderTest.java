@@ -112,6 +112,7 @@ public class AuctionOrderTest {
         Trade trade = new Trade(security, 15, 3, orders.get(0), order);
         security.findOpeningData();
         MatchResult result = matcher.executeAuction(order);
+
         assertThat(result.remainder().getQuantity()).isEqualTo(0);
         assertThat(result.trades()).containsExactly(trade);
         assertThat(security.getOrderBook().hasOrderOfType(BUY)).isEqualTo(false);

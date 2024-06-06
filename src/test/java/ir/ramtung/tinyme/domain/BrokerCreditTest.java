@@ -127,8 +127,8 @@ public class BrokerCreditTest {
     void detecting_request_for_update_without_sufficient_credit(){ // We can write this test in a situation where price has changed.
         EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(1, security.getIsin(), 1, LocalDateTime.now(), Side.BUY, 1004, 15700, 1, shareholder.getShareholderId(), 0, 0, 0);
         try {
-            MatchResult matchResult = security.updateOrder(updateOrderRq, matcher);
-            assertThat(matchResult.outcome()).isEqualTo(MatchingOutcome.NOT_ENOUGH_CREDIT);
+            SecurityStatus securityStatus = security.updateOrder(updateOrderRq, matcher);
+            assertThat(securityStatus.requestStatus()).isEqualTo(RequestStatus.NOT_ENOUGH_CREDIT);
             assertThat(firstBroker.getCredit()).isEqualTo(10000000);
         }
         catch (InvalidRequestException ex){

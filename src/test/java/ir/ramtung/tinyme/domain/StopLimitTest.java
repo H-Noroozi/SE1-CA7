@@ -96,7 +96,7 @@ public class StopLimitTest {
 
         Order changingStopLimitSellOrder = new Order(3, security, Side.SELL, 3, 10, broker, shareholder, 0);
         security.getOrderBook().enqueue(changingStopLimitSellOrder);
-        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 1, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
+        EnterOrderRq ChangingStopLimitnewOrderRq = EnterOrderRq.createNewOrderRq(3, "ABC", 2, LocalDateTime.now(), BUY, 3, 10, 1, shareholder.getShareholderId(), 0, 0, 0);
         orderHandler.handleEnterOrder(ChangingStopLimitnewOrderRq);
 
         assertThat(security.getLastTransactionPrice()).isEqualTo(10);
@@ -385,5 +385,31 @@ public class StopLimitTest {
         DeleteOrderRq deleteOrderRq = new DeleteOrderRq(3, security.getIsin(), BUY, 1);
         assertThatNoException().isThrownBy(() -> security.deleteOrder(deleteOrderRq));
         assertThat(security.getInactiveOrderBook().getBuyQueue()).isEmpty();
+    }
+    @Test
+    void new_stop_limit_order_without_enough_credit_fails() {
+        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 3, 2000000, broker.getBrokerId(), shareholder.getShareholderId(), 0, 0, 5);
+        orderHandler.handleEnterOrder(newOrderRq);
+        verify(eventPublisher).publish(new OrderRejectedEvent(1, 1, List.of(Message.BUYER_HAS_NOT_ENOUGH_CREDIT)));
+    }
+
+    @Test
+    void new_stop_limit_order_without_enough_position_fails() {
+        shareholder.decPosition(security, 99_999_999);
+        broker.increaseCreditBy(100_000_000);
+
+        EnterOrderRq newOrderRq = EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), SELL, 3000000, 2, broker.getBrokerId(), shareholder.getShareholderId(), 0, 0, 5);
+        orderHandler.handleEnterOrder(newOrderRq);
+        verify(eventPublisher).publish(new OrderRejectedEvent(1, 1, List.of(Message.SELLER_HAS_NOT_ENOUGH_POSITIONS)));
+    }
+
+    @Test
+    void update_order_invalid_if_order_is_activated_and_we_give_stop_limit() {
+        EnterOrderRq stopLimitOrderRq = EnterOrderRq.createNewOrderRq(2, "ABC", 1, LocalDateTime.now(), BUY, 3, 5, broker.getBrokerId(), shareholder.getShareholderId(), 0, 0, 3);
+        assertThatNoException().isThrownBy(() -> security.newOrder(stopLimitOrderRq, broker, shareholder, matcher));
+
+        EnterOrderRq updateOrderRq = EnterOrderRq.createUpdateOrderRq(3, security.getIsin(), 1, LocalDateTime.now(), BUY, 2, 7, broker.getBrokerId(), shareholder.getShareholderId(), 0, 0, 2);
+        orderHandler.handleEnterOrder(updateOrderRq);
+        verify(eventPublisher).publish(new OrderRejectedEvent(3, 1, List.of(Message.ORDER_ID_NOT_FOUND)));
     }
 }

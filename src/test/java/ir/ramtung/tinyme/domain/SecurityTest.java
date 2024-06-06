@@ -171,12 +171,9 @@ class SecurityTest {
 
         EnterOrderRq updateReq = EnterOrderRq.createUpdateOrderRq(5, security.getIsin(), 4, LocalDateTime.now(), SELL, 30, 10, 0, 0, 10, 0, 0);
 
-        MatchResult result = security.updateOrder(updateReq, matcher);
+        SecurityStatus result = security.updateOrder(updateReq, matcher);
 
-        assertThat(result.outcome()).isEqualTo(MatchingOutcome.EXECUTED);
+        assertThat(result.requestStatus()).isEqualTo(RequestStatus.UPDATED);
         assertThat(result.trades()).hasSize(2);
-        assertThat(result.remainder().getQuantity()).isZero();
     }
-
-
 }

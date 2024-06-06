@@ -6,6 +6,7 @@ import ir.ramtung.tinyme.messaging.request.EnterOrderRq;
 import ir.ramtung.tinyme.domain.service.Matcher;
 import ir.ramtung.tinyme.messaging.Message;
 import ir.ramtung.tinyme.messaging.request.MatchingState;
+import ir.ramtung.tinyme.messaging.request.OrderEntryType;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -38,11 +39,11 @@ public class Security {
     private int openingPrice = 0;
 
 
-    public MatchResult newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
+    public SecurityStatus newOrder(EnterOrderRq enterOrderRq, Broker broker, Shareholder shareholder, Matcher matcher) throws InvalidRequestException {
         if (enterOrderRq.getSide() == Side.SELL &&
                 !shareholder.hasEnoughPositionsOn(this,
                 orderBook.totalSellQuantityByShareholder(shareholder) + enterOrderRq.getQuantity()))
-            return MatchResult.notEnoughPositions();
+            return SecurityStatus.notEnoughPositions();
         Order order;
         if (enterOrderRq.getPeakSize() == 0 && enterOrderRq.getStopPrice() == 0)
             order = new Order(enterOrderRq.getOrderId(), this, enterOrderRq.getSide(),
@@ -62,11 +63,11 @@ public class Security {
             else{
                 if (stopLimitOrder.getSide() == Side.BUY) {
                     if (!stopLimitOrder.getBroker().hasEnoughCredit(stopLimitOrder.getValue())) {
-                        return MatchResult.notEnoughCredit();
+                        return SecurityStatus.notEnoughCredit();
                     }
                 }
                 inactiveOrderBook.enqueue(stopLimitOrder);
-                return MatchResult.queuedAsInactiveOrder();
+                return SecurityStatus.queuedAsInactiveOrder();
             }
         }
         else
@@ -74,15 +75,15 @@ public class Security {
         if (state == MatchingState.AUCTION){
             if (order.getSide() == Side.BUY) {
                 if (!order.getBroker().hasEnoughCredit(order.getValue())) {
-                    return MatchResult.notEnoughCredit();
+                    return SecurityStatus.notEnoughCredit();
                 }
                 order.getBroker().decreaseCreditBy(order.getValue());
             }
             orderBook.enqueue(order);
-            return MatchResult.auctioned();
+            return SecurityStatus.auctioned();
         }
         MatchResult matchResult = matcher.execute(order);
-        return matchResult;
+        return createAppropriateStatus(matchResult, enterOrderRq);
     }
 
     public void deleteOrder(DeleteOrderRq deleteOrderRq) throws InvalidRequestException {
@@ -99,7 +100,7 @@ public class Security {
         orderBook.removeByOrderId(deleteOrderRq.getSide(), deleteOrderRq.getOrderId());
     }
 
-    public MatchResult updateOrder(EnterOrderRq updateOrderRq, Matcher matcher) throws InvalidRequestException {
+    public SecurityStatus updateOrder(EnterOrderRq updateOrderRq, Matcher matcher) throws InvalidRequestException {
         Order order;
         if (updateOrderRq.getStopPrice() != 0) {
             order = inactiveOrderBook.findByOrderId(updateOrderRq.getSide(), updateOrderRq.getOrderId());
@@ -112,7 +113,7 @@ public class Security {
         if (updateOrderRq.getSide() == Side.SELL &&
                 !order.getShareholder().hasEnoughPositionsOn(this,
                 orderBook.totalSellQuantityByShareholder(order.getShareholder()) - order.getQuantity() + updateOrderRq.getQuantity()))
-            return MatchResult.notEnoughPositions();
+            return SecurityStatus.notEnoughPositions();
 
         boolean losesPriority = order.isQuantityIncreased(updateOrderRq.getQuantity())
                 || updateOrderRq.getPrice() != order.getPrice()
@@ -124,13 +125,14 @@ public class Security {
         if (order instanceof StopLimitOrder stopLimitOrder) {
             if (stopLimitOrder.mustBeActive(lastTransactionPrice)){
                 inactiveOrderBook.removeByOrderId(stopLimitOrder.getSide(), stopLimitOrder.getOrderId());
-                return matcher.execute((Order) stopLimitOrder);
+                MatchResult matchResult = matcher.execute((Order) stopLimitOrder);
+                return createAppropriateStatus(matchResult, updateOrderRq);
             }
             else {
                 if (stopLimitOrder.getStopPrice() != ((StopLimitOrder) originalOrder).getStopPrice()){
                     inactiveOrderBook.removeByOrderId(stopLimitOrder.getSide(), stopLimitOrder.getOrderId());
                     inactiveOrderBook.enqueue(stopLimitOrder);
-                    return MatchResult.executed(null, List.of());
+                    return SecurityStatus.updated();
                 }
             }
         }
@@ -143,7 +145,7 @@ public class Security {
             if (updateOrderRq.getSide() == Side.BUY) {
                 order.getBroker().decreaseCreditBy(order.getValue());
             }
-            return MatchResult.executed(null, List.of());
+            return SecurityStatus.updated();
         }
         else
             order.markAsNew();
@@ -159,17 +161,17 @@ public class Security {
             } else if (!matchResult.trades().isEmpty())
                 lastTransactionPrice = matchResult.trades().getLast().getPrice();
 
-            return matchResult;
+            return createAppropriateStatus(matchResult, updateOrderRq);
         }
         else{
             if (order.getSide() == Side.BUY) {
                 if (!order.getBroker().hasEnoughCredit(order.getValue())) {
-                    return MatchResult.notEnoughCredit();
+                    return SecurityStatus.notEnoughCredit();
                 }
                 order.getBroker().decreaseCreditBy(order.getValue());
             }
             orderBook.enqueue(order);
-            return MatchResult.executed(null, List.of());
+            return SecurityStatus.updated();
         }
     }
 
@@ -204,7 +206,8 @@ public class Security {
         return results;
     }
 
-    public LinkedList<MatchResult> runExecutableOrders(Matcher matcher){
+    public LinkedList<MatchResult> handleExecutableOrders(int tradePrice, Matcher matcher){
+        checkExecutableOrders(tradePrice);
         LinkedList<MatchResult> results = new LinkedList<>();
         while (!executableOrders.isEmpty()){
             StopLimitOrder executableOrder = (StopLimitOrder) executableOrders.removeFirst();
@@ -249,6 +252,29 @@ public class Security {
             results.add(matchResult);
         }
         return results;
+    }
+
+    private SecurityStatus createAppropriateStatus(MatchResult matchResult, EnterOrderRq enterOrderRq){
+        switch (matchResult.outcome()){
+            case EXECUTED -> {
+                if (enterOrderRq.getStopPrice() == 0) {
+                    if (enterOrderRq.getRequestType() == OrderEntryType.NEW_ORDER)
+                        return SecurityStatus.accepted(matchResult.trades());
+                    else
+                        return SecurityStatus.updated(matchResult.trades());
+                }
+                else {
+                    if (enterOrderRq.getRequestType() == OrderEntryType.NEW_ORDER)
+                        return SecurityStatus.acceptedAndActivated(matchResult.trades());
+                    else
+                        return SecurityStatus.updatedAndActivated(matchResult.trades());
+                }
+            }
+            case NOT_ENOUGH_CREDIT -> {return SecurityStatus.notEnoughCredit();}
+            case NOT_ENOUGH_POSITIONS -> {return SecurityStatus.notEnoughPositions();}
+            case NOT_ENOUGH_INITIAL_TRANSACTION -> {return SecurityStatus.notEnoughInitialTransaction();}
+            default -> {return SecurityStatus.notEnoughCredit();}
+        }
     }
 }
 
