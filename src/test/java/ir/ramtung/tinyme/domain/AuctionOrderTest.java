@@ -223,4 +223,16 @@ public class AuctionOrderTest {
 
         verify(eventPublisher).publish(new OrderRejectedEvent(599, 1, List.of(Message.CANNOT_DELETE_STOP_LIMIT_ORDER_IN_AUCTION_STATE)));
     }
+
+    @Test
+    void new_iceberg_buy_order_matches_with_the_first_buy_with_minimum_quantity_less_than_buy_quantity() {
+        Order incomingSellOrder = new IcebergOrder(2, security, Side.SELL, 7, 15, broker, shareholder, 4, 0);
+        security.getOrderBook().enqueue(incomingSellOrder);
+
+        orderHandler.handleEnterOrder(EnterOrderRq.createNewOrderRq(1, "ABC", 1, LocalDateTime.now(), BUY, 100, 65, 1, shareholder.getShareholderId(), 70, 0, 0));
+
+        verify(eventPublisher).publish((new OpeningPriceEvent("ABC", 25, 28)));
+        verify(eventPublisher).publish(new TradeEvent("ABC", 25, 4, 1, 2));
+        verify(eventPublisher).publish(new TradeEvent("ABC", 25, 3, 1, 2));
+    }
 }

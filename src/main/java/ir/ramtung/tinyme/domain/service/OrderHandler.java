@@ -32,6 +32,27 @@ public class OrderHandler {
         this.matcher = matcher;
     }
 
+    private void publishStopLimitOrderEvents(LinkedList<MatchResult> results) {
+        for (MatchResult result : results) {
+            StopLimitOrder executedOrder = (StopLimitOrder) result.remainder();
+            eventPublisher.publish(new OrderActivatedEvent(executedOrder.getRequestId(), executedOrder.getOrderId()));
+            if (!result.trades().isEmpty())
+                eventPublisher.publish(new OrderExecutedEvent(executedOrder.getRequestId(), executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
+        }
+    }
+
+    private LinkedList<MatchResult> handleAuctionedOrders(Security security) {
+        LinkedList<MatchResult> results = security.runAuctionedOrders(matcher);
+        for (MatchResult result : results) {
+            if (!result.trades().isEmpty()){
+                for (Trade trade : result.trades()) {
+                    eventPublisher.publish(new TradeEvent(trade.getSecurity().getIsin(), trade.getPrice(), trade.getQuantity(), trade.getBuy().getOrderId(), trade.getSell().getOrderId()));
+                }
+            }
+        }
+        return results;
+    }
+
     public void handleEnterOrder(EnterOrderRq enterOrderRq) {
         try {
             validateEnterOrderRq(enterOrderRq);
@@ -75,14 +96,7 @@ public class OrderHandler {
                 publishOpeningData(security);
 
             if (securityStatus.requestStatus() == RequestStatus.AUCTIONED) {
-                LinkedList<MatchResult> results = security.runAuctionedOrders(matcher);
-                for (MatchResult result : results) {
-                    if (!result.trades().isEmpty()){
-                        for (Trade trade : result.trades()) {
-                            eventPublisher.publish(new TradeEvent(trade.getSecurity().getIsin(), trade.getPrice(), trade.getQuantity(), trade.getBuy().getOrderId(), trade.getSell().getOrderId()));
-                        }
-                    }
-                }
+                handleAuctionedOrders(security);
             }
 
             if (!securityStatus.trades().isEmpty()) {
@@ -104,7 +118,6 @@ public class OrderHandler {
                         eventPublisher.publish(new OrderActivatedEvent(activatedOrder.getRequestId(), activatedOrder.getOrderId()));
                     }
                 }
-                // must become a function
             }
         } catch (InvalidRequestException ex) {
             eventPublisher.publish(new OrderRejectedEvent(enterOrderRq.getRequestId(), enterOrderRq.getOrderId(), ex.getReasons()));
@@ -130,44 +143,23 @@ public class OrderHandler {
     }
     private void processingStopLimitOrders(Security security, SecurityStatus securityStatus){
         LinkedList<MatchResult> results = security.handleExecutableOrders(securityStatus.trades().getLast().getPrice(), matcher);
-        for (MatchResult result : results) {
-            StopLimitOrder executedOrder = (StopLimitOrder) result.remainder();
-            eventPublisher.publish(new OrderActivatedEvent(executedOrder.getRequestId(), executedOrder.getOrderId()));
-            if (!result.trades().isEmpty()){
-                eventPublisher.publish(new OrderExecutedEvent(executedOrder.getRequestId(), executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
-            }
-        }
+        publishStopLimitOrderEvents(results);
     }
 
     public void handleChangeMatchingState(ChangeMatchingStateRq changeMatchingStateRq) {
         Security security = securityRepository.findSecurityByIsin(changeMatchingStateRq.getSecurityIsin());
-        if (security == null){
+        if (security == null)
             return;
-        }
         if (security.getState() == MatchingState.AUCTION){
-            LinkedList<MatchResult> results = security.runAuctionedOrders(matcher);
-            for (MatchResult result : results) {
-                if (!result.trades().isEmpty()){
-                    for (Trade trade : result.trades()) {
-                        eventPublisher.publish(new TradeEvent(trade.getSecurity().getIsin(), trade.getPrice(), trade.getQuantity(), trade.getBuy().getOrderId(), trade.getSell().getOrderId()));
-                    }
-                }
-            }
+            LinkedList<MatchResult> results = handleAuctionedOrders(security);
             security.checkExecutableOrders(results.get(0).trades().getLast().getPrice());
+
             LinkedList<MatchResult> activationResults;
-            if (changeMatchingStateRq.getTargetState() == MatchingState.AUCTION){
+            if (changeMatchingStateRq.getTargetState() == MatchingState.AUCTION)
                 activationResults = security.enqueueExecutableOrders();
-            }
-            else {
+            else
                 activationResults = security.handleExecutableOrders(results.get(0).trades().getLast().getPrice(), matcher);
-            }
-            for (MatchResult result : activationResults) {
-                StopLimitOrder executedOrder = (StopLimitOrder) result.remainder();
-                eventPublisher.publish(new OrderActivatedEvent(executedOrder.getRequestId(), executedOrder.getOrderId()));
-                if (!result.trades().isEmpty()){
-                    eventPublisher.publish(new OrderExecutedEvent(executedOrder.getRequestId(), executedOrder.getOrderId(), result.trades().stream().map(TradeDTO::new).collect(Collectors.toList())));
-                }
-            }
+            publishStopLimitOrderEvents(activationResults);
         }
         security.changeMatchingState(changeMatchingStateRq.getTargetState());
         eventPublisher.publish(new SecurityStateChangedEvent(changeMatchingStateRq.getSecurityIsin(), changeMatchingStateRq.getTargetState()));
